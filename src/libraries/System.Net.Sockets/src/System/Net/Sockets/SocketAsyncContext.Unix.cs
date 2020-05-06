@@ -113,10 +113,11 @@ namespace System.Net.Sockets
         {
             private enum State
             {
-                Waiting = 0,
+                Queued = 0,
                 Running = 1,
                 Complete = 2,
-                Cancelled = 3
+                Cancelled = 3,
+                Pooled = 4
             }
 
             private int _state; // Actually AsyncOperation.State.
@@ -126,7 +127,7 @@ namespace System.Net.Sockets
 #endif
 
             public readonly SocketAsyncContext AssociatedContext;
-            public AsyncOperation Next = null!; // initialized by helper called from ctor
+            public AsyncOperation? Next = null!; // initialized by helper called from ctor
             protected object? CallbackOrEvent;
             public SocketError ErrorCode;
             public byte[]? SocketAddress;
@@ -142,13 +143,14 @@ namespace System.Net.Sockets
             public AsyncOperation(SocketAsyncContext context)
             {
                 AssociatedContext = context;
+                Next = this;
                 Reset();
             }
 
             public void Reset()
             {
-                _state = (int)State.Waiting;
-                Next = this;
+                Debug.Assert(Next == this);
+                _state = (int)State.Pooled;
 #if DEBUG
                 _callbackQueued = 0;
 #endif
@@ -167,7 +169,7 @@ namespace System.Net.Sockets
 
             public bool TrySetRunning()
             {
-                State oldState = (State)Interlocked.CompareExchange(ref _state, (int)State.Running, (int)State.Waiting);
+                State oldState = (State)Interlocked.CompareExchange(ref _state, (int)State.Running, (int)State.Queued);
                 if (oldState == State.Cancelled)
                 {
                     // This operation has already been cancelled, and had its completion processed.
@@ -175,7 +177,7 @@ namespace System.Net.Sockets
                     return false;
                 }
 
-                Debug.Assert(oldState == (int)State.Waiting);
+                Debug.Assert(oldState == (int)State.Queued);
                 return true;
             }
 
@@ -186,16 +188,16 @@ namespace System.Net.Sockets
                 Volatile.Write(ref _state, (int)State.Complete);
             }
 
-            public void SetWaiting()
+            public void SetQueued()
             {
-                Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
+                //Debug.Assert(Volatile.Read(ref _state) == (int)State.Running);
 
-                Volatile.Write(ref _state, (int)State.Waiting);
+                Volatile.Write(ref _state, (int)State.Queued);
             }
 
-            public bool TryCancel()
+            public bool TryCancel(SocketAsyncContext context)
             {
-                Trace("Enter");
+                TraceWithContext(context, "Enter");
 
                 // We're already canceling, so we don't need to still be hooked up to listen to cancellation.
                 // The cancellation request could also be caused by something other than the token, so it's
@@ -207,21 +209,22 @@ namespace System.Net.Sockets
                 bool keepWaiting = true;
                 while (keepWaiting)
                 {
-                    int state = Interlocked.CompareExchange(ref _state, (int)State.Cancelled, (int)State.Waiting);
+                    int state = Interlocked.CompareExchange(ref _state, (int)State.Cancelled, (int)State.Queued);
                     switch ((State)state)
                     {
                         case State.Running:
                             // A completion attempt is in progress. Keep busy-waiting.
-                            Trace("Busy wait");
+                            TraceWithContext(context, "Busy wait");
                             spinWait.SpinOnce();
                             break;
 
                         case State.Complete:
+                        case State.Pooled:
                             // A completion attempt succeeded. Consider this operation as having completed within the timeout.
-                            Trace("Exit, previously completed");
+                            TraceWithContext(context, "Exit, previously completed");
                             return false;
 
-                        case State.Waiting:
+                        case State.Queued:
                             // This operation was successfully cancelled.
                             // Break out of the loop to handle the cancellation
                             keepWaiting = false;
@@ -230,12 +233,12 @@ namespace System.Net.Sockets
                         case State.Cancelled:
                             // Someone else cancelled the operation.
                             // The previous canceller will have fired the completion, etc.
-                            Trace("Exit, previously cancelled");
+                            TraceWithContext(context, "Exit, previously cancelled");
                             return false;
                     }
                 }
 
-                Trace("Cancelled, processing completion");
+                TraceWithContext(context, "Cancelled, processing completion");
 
                 // The operation successfully cancelled.
                 // It's our responsibility to set the error code and queue the completion.
@@ -258,7 +261,7 @@ namespace System.Net.Sockets
                     ThreadPool.UnsafeQueueUserWorkItem(o => ((AsyncOperation)o!).InvokeCallback(allowPooling: false), this);
                 }
 
-                Trace("Exit");
+                TraceWithContext(context, "Exit");
 
                 // Note, we leave the operation in the OperationQueue.
                 // When we get around to processing it, we'll see it's cancelled and skip it.
@@ -315,13 +318,11 @@ namespace System.Net.Sockets
 
             public abstract void InvokeCallback(bool allowPooling);
 
-            [Conditional("SOCKETASYNCCONTEXT_TRACE")]
-            public void Trace(string message, [CallerMemberName] string? memberName = null)
-            {
-                OutputTrace($"{IdOf(this)}.{memberName}: {message}");
-            }
+            // public void Trace(string message, [CallerMemberName] string? memberName = null)
+            // {
+            //     OutputTrace($"{IdOf(this)}.{memberName}: {message}");
+            // }
 
-            [Conditional("SOCKETASYNCCONTEXT_TRACE")]
             public void TraceWithContext(SocketAsyncContext context, string message, [CallerMemberName] string? memberName = null)
             {
                 OutputTrace($"{IdOf(context)}, {IdOf(this)}.{memberName}: {message}");
@@ -679,72 +680,171 @@ namespace System.Net.Sockets
         private struct OperationQueue<TOperation>
             where TOperation : AsyncOperation
         {
-            // Quick overview:
-            //
-            // When attempting to perform an IO operation, the caller first checks IsReady,
-            // and if true, attempts to perform the operation itself.
-            // If this returns EWOULDBLOCK, or if the queue was not ready, then the operation
-            // is enqueued by calling StartAsyncOperation and the state becomes Waiting.
-            // When an epoll notification is received, we check if the state is Waiting,
-            // and if so, change the state to Processing and enqueue a workitem to the threadpool
-            // to try to perform the enqueued operations.
-            // If an operation is successfully performed, we remove it from the queue,
-            // enqueue another threadpool workitem to process the next item in the queue (if any),
-            // and call the user's completion callback.
-            // If we successfully process all enqueued operations, then the state becomes Ready;
-            // otherwise, the state becomes Waiting and we wait for another epoll notification.
-
-            private enum QueueState : byte
-            {
-                Ready = 0,          // Indicates that data MAY be available on the socket.
-                                    // Queue must be empty.
-                Waiting = 1,        // Indicates that data is definitely not available on the socket.
-                                    // Queue must not be empty.
-                Processing = 2,     // Indicates that a thread pool item has been scheduled (and may
-                                    // be executing) to process the IO operations in the queue.
-                                    // Queue must not be empty.
-                Stopped = 3,        // Indicates that the queue has been stopped because the
-                                    // socket has been closed.
-                                    // Queue must be empty.
-            }
-
-            // These fields define the queue state.
-
-            private QueueState _state;      // See above
             private int _sequenceNumber;    // This sequence number is updated when we receive an epoll notification.
                                             // It allows us to detect when a new epoll notification has arrived
                                             // since the last time we checked the state of the queue.
                                             // If this happens, we MUST retry the operation, otherwise we risk
                                             // "losing" the notification and causing the operation to pend indefinitely.
-            private AsyncOperation? _tail;   // Queue of pending IO operations to process when data becomes available.
+            private AsyncOperation? _queue;   // Queue of pending IO operations to process when data becomes available.
 
-            // The _queueLock is used to ensure atomic access to the queue state above.
-            // The lock is only ever held briefly, to read and/or update queue state, and
-            // never around any external call, e.g. OS call or user code invocation.
-            private object _queueLock;
+            private class AsyncOperationGate : AsyncOperation
+            {
+                public AsyncOperationGate() : base(null!) { }
 
-            private LockToken Lock() => new LockToken(_queueLock);
+                protected override bool DoTryComplete(SocketAsyncContext context)
+                {
+                    throw new InvalidOperationException();
+                }
+
+                public override void InvokeCallback(bool allowPooling)
+                {
+                    throw new InvalidOperationException();
+                }
+
+                protected override void Abort()
+                {
+                    throw new InvalidOperationException();
+                }
+            }
+
+            private class SentinelOperation : AsyncOperation
+            {
+                public SentinelOperation() : base(null!) { }
+
+                protected override bool DoTryComplete(SocketAsyncContext context)
+                {
+                    throw new InvalidOperationException();
+                }
+
+                public override void InvokeCallback(bool allowPooling)
+                {
+                    throw new InvalidOperationException();
+                }
+
+                protected override void Abort()
+                {
+                    throw new InvalidOperationException();
+                }
+            }
+
+            private static readonly SentinelOperation DisposedSentinel = new SentinelOperation();
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static bool IsDisposed(AsyncOperation? queue) => object.ReferenceEquals(queue, DisposedSentinel);
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static bool IsGate(AsyncOperation queue) => queue.GetType() == typeof(AsyncOperationGate);
+
+            public bool IsReady(SocketAsyncContext context, out int observedSequenceNumber)
+            {
+                observedSequenceNumber = Volatile.Read(ref _sequenceNumber);
+                bool isReady = QueueGetFirst() is null;
+
+                Trace(context, $"{isReady}");
+
+                return isReady;
+            }
+
+            private AsyncOperation? QueueGetFirst()
+            {
+                AsyncOperation? queue = Volatile.Read(ref _queue);
+                if (queue is null || IsDisposed(queue))
+                {
+                    return null;
+                }
+
+                if (IsGate(queue))
+                {
+                    lock (queue)
+                    {
+                        return queue.Next?.Next;
+                    }
+                }
+                else
+                {
+                    return queue;
+                }
+            }
 
             public void Init()
             {
-                Debug.Assert(_queueLock == null);
-                _queueLock = new object();
-
-                _state = QueueState.Ready;
                 _sequenceNumber = 0;
             }
 
-            // IsReady returns the current _sequenceNumber, which must be passed to StartAsyncOperation below.
-            public bool IsReady(SocketAsyncContext context, out int observedSequenceNumber)
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private (bool isFirst, bool isDisposed) Enqueue(AsyncOperation operation)
             {
-                using (Lock())
+                Debug.Assert(operation.Next == operation); // non-queued point to self.
+                operation.SetQueued(); // TODO this doesn't have to be Volatile
+                AsyncOperation? queue = Interlocked.CompareExchange(ref _queue, operation, null);
+                if (queue is null)
                 {
-                    observedSequenceNumber = _sequenceNumber;
-                    bool isReady = (_state == QueueState.Ready) || (_state == QueueState.Stopped);
+                    return (true, false);
+                }
 
-                    Trace(context, $"{isReady}");
+                return EnqueueSlow(operation, queue);
+            }
 
-                    return isReady;
+            private (bool isFirst, bool isDisposed) EnqueueSlow(AsyncOperation operation, AsyncOperation? queue)
+            {
+                Debug.Assert(queue != null);
+
+                SpinWait spin = default;
+                while (true)
+                {
+                    if (IsDisposed(queue))
+                    {
+                        return (false, true);
+                    }
+                    else
+                    {
+                        // Install a gate.
+                        if (!IsGate(queue))
+                        {
+                            AsyncOperation singleOperation = queue;
+                            Debug.Assert(singleOperation.Next == singleOperation);
+
+                            AsyncOperation gate = new AsyncOperationGate();
+                            gate.Next = singleOperation;
+                            queue = Interlocked.CompareExchange(ref _queue, gate, singleOperation);
+                            if (queue != singleOperation)
+                            {
+                                if (queue is null)
+                                {
+                                    queue = Interlocked.CompareExchange(ref _queue, operation, null);
+                                    if (queue is null)
+                                    {
+                                        return (true, false);
+                                    }
+                                }
+                                spin.SpinOnce();
+                                continue;
+                            }
+                            queue = gate;
+                        }
+
+                        lock (queue)
+                        {
+                            if (object.ReferenceEquals(_queue, DisposedSentinel))
+                            {
+                                return (false, true);
+                            }
+
+                            AsyncOperation? last = queue.Next;
+                            if (last == null) // empty queue
+                            {
+                                queue.Next = operation;
+                                return (true, false);
+                            }
+                            else
+                            {
+                                queue.Next = operation;     // gate points to new last
+                                operation.Next = last.Next; // new last points to first
+                                last.Next = operation;      // previous last points to new last
+                                return (false, false);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -758,74 +858,69 @@ namespace System.Net.Sockets
                     context.Register();
                 }
 
+                (bool isFirst, bool doAbort) = Enqueue(operation);
+
+                if (doAbort)
+                {
+                    operation.DoAbort();
+                    Trace(context, $"Leave, queue stopped");
+
+                    return false;
+                }
+                else
+                {
+                    // Now that the object is enqueued, hook up cancellation.
+                    // Note that it's possible the call to register itself could
+                    // call TryCancel, so we do this after the op is fully enqueued.
+                    if (cancellationToken.CanBeCanceled)
+                    {
+                        operation.CancellationRegistration = cancellationToken.UnsafeRegister(s => ((TOperation)s!).TryCancel(context), operation);
+                    }
+
+                    if (isFirst && observedSequenceNumber != Volatile.Read(ref _sequenceNumber))
+                    {
+                        EnsureProcessingIfNeeded(context);
+                    }
+
+                    Trace(context, $"Leave, enqueued {IdOf(operation)}");
+                    return true;
+                }
+            }
+
+            private int _processing;
+
+            private void EnsureProcessingIfNeeded(SocketAsyncContext context, ConcurrentQueue<object>? operationQueue = null)
+            {
+                Trace(context, $"Enter");
+
                 while (true)
                 {
-                    bool doAbort = false;
-                    using (Lock())
+                    AsyncOperation? op;
+                    if (Interlocked.CompareExchange(ref _processing, 1, 0) == 0)
                     {
-                        switch (_state)
+                        op = QueueGetFirst();
+                        if (op != null)
                         {
-                            case QueueState.Ready:
-                                if (observedSequenceNumber != _sequenceNumber)
-                                {
-                                    // The queue has become ready again since we previously checked it.
-                                    // So, we need to retry the operation before we enqueue it.
-                                    Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
-                                    observedSequenceNumber = _sequenceNumber;
-                                    break;
-                                }
+                            Trace(context, "Exit (processing)");
 
-                                // Caller tried the operation and got an EWOULDBLOCK, so we need to transition.
-                                _state = QueueState.Waiting;
-                                goto case QueueState.Waiting;
-
-                            case QueueState.Waiting:
-                            case QueueState.Processing:
-                                // Enqueue the operation.
-                                Debug.Assert(operation.Next == operation, "Expected operation.Next == operation");
-
-                                if (_tail != null)
-                                {
-                                    operation.Next = _tail.Next;
-                                    _tail.Next = operation;
-                                }
-
-                                _tail = operation;
-                                Trace(context, $"Leave, enqueued {IdOf(operation)}");
-
-                                // Now that the object is enqueued, hook up cancellation.
-                                // Note that it's possible the call to register itself could
-                                // call TryCancel, so we do this after the op is fully enqueued.
-                                if (cancellationToken.CanBeCanceled)
-                                {
-                                    operation.CancellationRegistration = cancellationToken.UnsafeRegister(s => ((TOperation)s!).TryCancel(), operation);
-                                }
-
-                                return true;
-
-                            case QueueState.Stopped:
-                                Debug.Assert(_tail == null);
-                                doAbort = true;
-                                break;
-
-                            default:
-                                Environment.FailFast("unexpected queue state");
-                                break;
+                            // Dispatch processing.
+                            op.Dispatch(operationQueue);
+                            return;
                         }
+                        Volatile.Write(ref _processing, 0);
                     }
-
-                    if (doAbort)
+                    else
                     {
-                        operation.DoAbort();
-                        Trace(context, $"Leave, queue stopped");
-                        return false;
+                        Trace(context, "Exit (already processing)");
+                        // Already processing.
+                        return;
                     }
-
-                    // Retry the operation.
-                    if (operation.TryComplete(context))
+                    // Verify no operation was added.
+                    op = QueueGetFirst();
+                    if (op == null)
                     {
-                        Trace(context, $"Leave, retry succeeded");
-                        return false;
+                        Trace(context, "Exit (empty)");
+                        return;
                     }
                 }
             }
@@ -833,45 +928,10 @@ namespace System.Net.Sockets
             // Called on the epoll thread whenever we receive an epoll notification.
             public void HandleEvent(SocketAsyncContext context, ConcurrentQueue<object> operationQueue)
             {
-                AsyncOperation op;
-                using (Lock())
-                {
-                    Trace(context, $"Enter");
-
-                    switch (_state)
-                    {
-                        case QueueState.Ready:
-                            Debug.Assert(_tail == null, "State == Ready but queue is not empty!");
-                            _sequenceNumber++;
-                            Trace(context, $"Exit (previously ready)");
-                            return;
-
-                        case QueueState.Waiting:
-                            Debug.Assert(_tail != null, "State == Waiting but queue is empty!");
-                            _state = QueueState.Processing;
-                            op = _tail.Next;
-                            // Break out and release lock
-                            break;
-
-                        case QueueState.Processing:
-                            Debug.Assert(_tail != null, "State == Processing but queue is empty!");
-                            _sequenceNumber++;
-                            Trace(context, $"Exit (currently processing)");
-                            return;
-
-                        case QueueState.Stopped:
-                            Debug.Assert(_tail == null);
-                            Trace(context, $"Exit (stopped)");
-                            return;
-
-                        default:
-                            Environment.FailFast("unexpected queue state");
-                            return;
-                    }
-                }
-
-                // Dispatch the op so we can try to process it.
-                op.Dispatch(operationQueue);
+                Trace(context, $"Enter");
+                Interlocked.Increment(ref _sequenceNumber);
+                EnsureProcessingIfNeeded(context, operationQueue);
+                Trace(context, $"Leave");
             }
 
             internal void ProcessAsyncOperation(TOperation op)
@@ -901,33 +961,80 @@ namespace System.Net.Sockets
                 Cancelled = 2
             }
 
-            public OperationResult ProcessQueuedOperation(TOperation op)
+            private bool TryStopProcessing(ref int observedSequenceNumber)
             {
-                SocketAsyncContext context = op.AssociatedContext;
+                Debug.Assert(Volatile.Read(ref _processing) == 1);
 
-                int observedSequenceNumber;
-                using (Lock())
+                Volatile.Write(ref _processing, 0);
+
+                int sequenceNumber = Volatile.Read(ref _sequenceNumber);
+                if (sequenceNumber == observedSequenceNumber)
                 {
-                    Trace(context, $"Enter");
+                    return true;
+                }
+                else
+                {
+                    observedSequenceNumber = sequenceNumber;
+                    bool resumeProcessing = Interlocked.CompareExchange(ref _processing, 1, 0) == 0;
+                    return !resumeProcessing;
+                }
+            }
 
-                    if (_state == QueueState.Stopped)
+            private void StopProcessing(SocketAsyncContext context)
+            {
+                Debug.Assert(Volatile.Read(ref _processing) == 1);
+
+                Volatile.Write(ref _processing, 0);
+
+                AsyncOperation? op = QueueGetFirst();
+                if (op != null)
+                {
+                    EnsureProcessingIfNeeded(context);
+                }
+            }
+
+            private AsyncOperation? DequeueFirstAndGetNext(AsyncOperation first)
+            {
+                AsyncOperation? queue = Interlocked.CompareExchange(ref _queue, null, first);
+                Debug.Assert(queue != null);
+                if (object.ReferenceEquals(queue, first) || IsDisposed(queue))
+                {
+                    return null;
+                }
+
+                Debug.Assert(IsGate(queue));
+                lock (queue)
+                {
+                    if (queue.Next == first) // we're the last -> single element
                     {
-                        Debug.Assert(_tail == null);
-                        Trace(context, $"Exit (stopped)");
-                        return OperationResult.Cancelled;
+                        Debug.Assert(first.Next == first); // verify we're a single element list
+                        queue.Next = null;
+                        return null;
                     }
                     else
                     {
-                        Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-                        Debug.Assert(_tail != null, "Unexpected empty queue while processing I/O");
-                        Debug.Assert(op == _tail.Next, "Operation is not at head of queue???");
-                        observedSequenceNumber = _sequenceNumber;
+                        AsyncOperation? last = queue.Next;
+                        Debug.Assert(last != null); // there is an element
+                        Debug.Assert(last.Next == first); // we're first
+                        last.Next = first.Next; // skip operation
+                        first.Next = first;     // point to self
+                        return last.Next;
                     }
                 }
+            }
+
+            public OperationResult ProcessQueuedOperation(TOperation op)
+            {
+                Debug.Assert(Volatile.Read(ref _processing) == 1);
+
+                SocketAsyncContext context = op.AssociatedContext;
+                Trace(context, $"Enter");
 
                 bool wasCompleted = false;
                 while (true)
                 {
+                    int observedSequenceNumber = Volatile.Read(ref _sequenceNumber);
+
                     // Try to change the op state to Running.
                     // If this fails, it means the operation was previously cancelled,
                     // and we should just remove it from the queue without further processing.
@@ -944,73 +1051,88 @@ namespace System.Net.Sockets
                         break;
                     }
 
-                    op.SetWaiting();
+                    op.SetQueued();
 
-                    // Check for retry and reset queue state.
-
-                    using (Lock())
+                    if (TryStopProcessing(ref observedSequenceNumber))
                     {
-                        if (_state == QueueState.Stopped)
-                        {
-                            Debug.Assert(_tail == null);
-                            Trace(context, $"Exit (stopped)");
-                            return OperationResult.Cancelled;
-                        }
-                        else
-                        {
-                            Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
 
-                            if (observedSequenceNumber != _sequenceNumber)
-                            {
-                                // We received another epoll notification since we previously checked it.
-                                // So, we need to retry the operation.
-                                Debug.Assert(observedSequenceNumber - _sequenceNumber < 10000, "Very large sequence number increase???");
-                                observedSequenceNumber = _sequenceNumber;
-                            }
-                            else
-                            {
-                                _state = QueueState.Waiting;
-                                Trace(context, $"Exit (received EAGAIN)");
-                                return OperationResult.Pending;
-                            }
-                        }
+                        Trace(context, $"Leave (pending)");
+                        return OperationResult.Pending;
                     }
                 }
 
                 // Remove the op from the queue and see if there's more to process.
 
-                AsyncOperation? nextOp = null;
-                using (Lock())
+                AsyncOperation? nextOp = DequeueFirstAndGetNext(op);
+                if (nextOp != null)
                 {
-                    if (_state == QueueState.Stopped)
-                    {
-                        Debug.Assert(_tail == null);
-                        Trace(context, $"Exit (stopped)");
-                    }
-                    else
-                    {
-                        Debug.Assert(_state == QueueState.Processing, $"_state={_state} while processing queue!");
-                        Debug.Assert(_tail.Next == op, "Queue modified while processing queue");
-
-                        if (op == _tail)
-                        {
-                            // No more operations to process
-                            _tail = null;
-                            _state = QueueState.Ready;
-                            _sequenceNumber++;
-                            Trace(context, $"Exit (finished queue)");
-                        }
-                        else
-                        {
-                            // Pop current operation and advance to next
-                            nextOp = _tail.Next = op.Next;
-                        }
-                    }
+                    Trace(context, $"Leave (dispatch)");
+                    nextOp.Dispatch();
+                }
+                else
+                {
+                    Trace(context, $"Leave (stop)");
+                    StopProcessing(context);
                 }
 
-                nextOp?.Dispatch();
-
                 return (wasCompleted ? OperationResult.Completed : OperationResult.Cancelled);
+            }
+
+            private (bool isFirst, bool remaining) RemoveQueued(AsyncOperation operation)
+            {
+                AsyncOperation? queue = Interlocked.CompareExchange(ref _queue, null, operation);
+                if (object.ReferenceEquals(queue, operation))
+                {
+                    return (isFirst: true, remaining: false);
+                }
+                if (queue is object && IsGate(queue))
+                {
+                    lock (queue)
+                    {
+                        if (queue.Next == operation) // We're the last
+                        {
+                            if (operation.Next == operation) // We're the only
+                            {
+                                queue.Next = null; // empty
+                                return (isFirst: true, remaining: false);
+                            }
+                            else
+                            {
+                                // Find newLast
+                                AsyncOperation newLast = operation.Next!;
+                                {
+                                    AsyncOperation newLastNext = newLast.Next!;
+                                    while (newLastNext != operation)
+                                    {
+                                        newLast = newLastNext;
+                                    }
+                                }
+                                newLast.Next = operation.Next; // last point to first
+                                queue.Next = newLast;          // gate points to last
+                                operation.Next = operation;    // point to self
+                                return (isFirst: false, remaining: true);
+                            }
+                        }
+                        AsyncOperation? last = queue.Next;
+                        if (last != null)
+                        {
+                            AsyncOperation it = last;
+                            do
+                            {
+                                AsyncOperation next = it.Next!;
+                                if (next == operation)
+                                {
+                                    it.Next = operation.Next;   // skip operation
+                                    operation.Next = operation; // point to self
+                                    return (isFirst: it == last, remaining: true);
+                                }
+                                it = next;
+                            } while (it != last);
+                        }
+                        return (isFirst: false, remaining: false);
+                    }
+                }
+                return (isFirst: false, remaining: false);
             }
 
             public void CancelAndContinueProcessing(TOperation op)
@@ -1018,113 +1140,58 @@ namespace System.Net.Sockets
                 // Note, only sync operations use this method.
                 Debug.Assert(op.Event != null);
 
-                // Remove operation from queue.
-                // Note it must be there since it can only be processed and removed by the caller.
-                AsyncOperation? nextOp = null;
-                using (Lock())
+                (bool isFirst, bool remaining) = RemoveQueued(op);
+
+                if (isFirst && remaining)
                 {
-                    if (_state == QueueState.Stopped)
-                    {
-                        Debug.Assert(_tail == null);
-                    }
-                    else
-                    {
-                        Debug.Assert(_tail != null, "Unexpected empty queue in CancelAndContinueProcessing");
-
-                        if (_tail.Next == op)
-                        {
-                            // We're the head of the queue
-                            if (op == _tail)
-                            {
-                                // No more operations
-                                _tail = null;
-                            }
-                            else
-                            {
-                                // Pop current operation and advance to next
-                                _tail.Next = op.Next;
-                            }
-
-                            // We're the first op in the queue.
-                            if (_state == QueueState.Processing)
-                            {
-                                // The queue has already handed off execution responsibility to us.
-                                // We need to dispatch to the next op.
-                                if (_tail == null)
-                                {
-                                    _state = QueueState.Ready;
-                                    _sequenceNumber++;
-                                }
-                                else
-                                {
-                                    nextOp = _tail.Next;
-                                }
-                            }
-                            else if (_state == QueueState.Waiting)
-                            {
-                                if (_tail == null)
-                                {
-                                    _state = QueueState.Ready;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // We're not the head of the queue.
-                            // Just find this op and remove it.
-                            AsyncOperation current = _tail.Next;
-                            while (current.Next != op)
-                            {
-                                current = current.Next;
-                            }
-
-                            if (current.Next == _tail)
-                            {
-                                _tail = current;
-                            }
-                            current.Next = current.Next.Next;
-                        }
-                    }
+                    SocketAsyncContext context = op.AssociatedContext;
+                    EnsureProcessingIfNeeded(context);
                 }
-
-                nextOp?.Dispatch();
             }
 
             // Called when the socket is closed.
             public bool StopAndAbort(SocketAsyncContext context)
             {
+                Trace(context, $"Enter");
                 bool aborted = false;
 
+                AsyncOperation? queue = Interlocked.Exchange(ref _queue, DisposedSentinel);
+
                 // We should be called exactly once, by SafeSocketHandle.
-                Debug.Assert(_state != QueueState.Stopped);
+                Debug.Assert(queue != DisposedSentinel);
 
-                using (Lock())
+                if (queue != null)
                 {
-                    Trace(context, $"Enter");
-
-                    Debug.Assert(_state != QueueState.Stopped);
-
-                    _state = QueueState.Stopped;
-
-                    if (_tail != null)
+                    AsyncOperation? gate = queue as AsyncOperationGate;
+                    if (gate != null)
                     {
-                        AsyncOperation op = _tail;
-                        do
+                        // Synchronize with Enqueue.
+                        lock (gate)
+                        { }
+
+                        AsyncOperation? last = gate.Next;
+                        if (last != null)
                         {
-                            aborted |= op.TryCancel();
-                            op = op.Next;
-                        } while (op != _tail);
+                            AsyncOperation op = last;
+                            do
+                            {
+                                aborted |= op.TryCancel(context);
+                                op = op.Next!;
+                            } while (op != last);
+                        }
                     }
-
-                    _tail = null;
-
-                    Trace(context, $"Exit");
+                    else
+                    {
+                        // queue is single operation
+                        aborted |= queue.TryCancel(context);
+                    }
                 }
+
+                Trace(context, $"Exit");
 
                 return aborted;
             }
 
-            [Conditional("SOCKETASYNCCONTEXT_TRACE")]
             public void Trace(SocketAsyncContext context, string message, [CallerMemberName] string? memberName = null)
             {
                 string queueType =
@@ -1132,7 +1199,7 @@ namespace System.Net.Sockets
                     typeof(TOperation) == typeof(WriteOperation) ? "send" :
                     "???";
 
-                OutputTrace($"{IdOf(context)}-{queueType}.{memberName}: {message}, {_state}-{_sequenceNumber}, {((_tail == null) ? "empty" : "not empty")}");
+                OutputTrace($"{IdOf(context)}-{queueType}.{memberName}: {message}, {(_processing == 1 ? "processing" : "not processing")}-{_sequenceNumber}, {((QueueGetFirst() == null) ? "empty" : "not empty")}");
             }
         }
 
@@ -1979,19 +2046,16 @@ namespace System.Net.Sockets
         // (1) Add reference to System.Console in the csproj
         // (2) #define SOCKETASYNCCONTEXT_TRACE
 
-        [Conditional("SOCKETASYNCCONTEXT_TRACE")]
         public void Trace(string message, [CallerMemberName] string? memberName = null)
         {
             OutputTrace($"{IdOf(this)}.{memberName}: {message}");
         }
 
-        [Conditional("SOCKETASYNCCONTEXT_TRACE")]
+
         public static void OutputTrace(string s)
         {
             // CONSIDER: Change to NetEventSource
-#if SOCKETASYNCCONTEXT_TRACE
             Console.WriteLine(s);
-#endif
         }
 
         public static string IdOf(object o) => o == null ? "(null)" : $"{o.GetType().Name}#{o.GetHashCode():X2}";
