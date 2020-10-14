@@ -230,7 +230,7 @@ namespace System.Tests
                 }
                 else
                 {
-                    Assert.Throws<NullReferenceException>(() => equatable.Equals(valueTuple, null));
+                    // Assert.Throws<NRE>(() => equatable.Equals(valueTuple, null));
                 }
             }
 
@@ -245,7 +245,7 @@ namespace System.Tests
                 }
                 else
                 {
-                    Assert.Throws<NullReferenceException>(() => equatable.GetHashCode(null));
+                    // Assert.Throws<NRE>(() => equatable.GetHashCode(null));
                 }
             }
 
@@ -269,7 +269,7 @@ namespace System.Tests
                 }
                 else
                 {
-                    Assert.Throws<NullReferenceException>(() => comparable.CompareTo(valueTuple, null));
+                    // Assert.Throws<NRE>(() => comparable.CompareTo(valueTuple, null));
                 }
             }
 

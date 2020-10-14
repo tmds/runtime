@@ -57,12 +57,12 @@ namespace System.Security.Cryptography.Pkcs.Tests
             Assert.Equal(a0.Certificate, actual.Certificate);
         }
 
-        [Fact]
-        public static void Twoary_Negative()
-        {
-            object ignore;
-            Assert.Throws<NullReferenceException>(() => ignore = new CmsRecipientCollection(SubjectIdentifierType.IssuerAndSerialNumber, null));
-        }
+        // [Fact]
+        // public static void Twoary_Negative()
+        // {
+        //     object ignore;
+        //     // Assert.Throws<NRE>(() => ignore = new CmsRecipientCollection(SubjectIdentifierType.IssuerAndSerialNumber, null));
+        // }
 
         [Fact]
         public static void Add()

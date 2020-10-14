@@ -45,6 +45,7 @@ SET_DEFAULT_DEBUG_CHANNEL(EXCEPT); // some headers have code with asserts, so do
 #include <sys/utsname.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <stdlib.h>
 
 #include "pal/context.h"
 
@@ -510,6 +511,7 @@ static void sigsegv_handler(int code, siginfo_t *siginfo, void *context)
 {
     if (PALIsInitialized())
     {
+        abort();
         // First check if we have a stack overflow
         size_t sp = (size_t)GetNativeContextSP((native_context_t *)context);
         size_t failureAddress = (size_t)siginfo->si_addr;

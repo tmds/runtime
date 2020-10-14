@@ -853,7 +853,7 @@ namespace System.Net.Tests
             {
                 response.Headers.Add("OldName", "OldValue");
 
-                Assert.Throws<NullReferenceException>(() => response.Headers = null);
+                // Assert.Throws<NRE>(() => response.Headers = null);
                 Assert.Equal(0, response.Headers.Count);
             }
         }

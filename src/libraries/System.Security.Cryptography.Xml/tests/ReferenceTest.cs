@@ -30,7 +30,7 @@ namespace System.Security.Cryptography.Xml.Tests
             Assert.Null(reference.Id);
             Assert.Null(reference.Type);
             Assert.Null(reference.Uri);
-            Assert.Throws<NullReferenceException>(() => reference.GetXml());
+            // Assert.Throws<NRE>(() => reference.GetXml());
         }
 
         [Theory]
@@ -49,7 +49,7 @@ namespace System.Security.Cryptography.Xml.Tests
             Assert.Null(reference.Id);
             Assert.Null(reference.Type);
             Assert.Equal(uri, reference.Uri);
-            Assert.Throws<NullReferenceException>(() => reference.GetXml());
+            // Assert.Throws<NRE>(() => reference.GetXml());
         }
 
         [Theory]
@@ -69,7 +69,7 @@ namespace System.Security.Cryptography.Xml.Tests
                 Assert.Null(reference.Id);
                 Assert.Null(reference.Type);
                 Assert.Null(reference.Uri);
-                Assert.Throws<NullReferenceException>(() => reference.GetXml());
+                // Assert.Throws<NRE>(() => reference.GetXml());
             }
         }
 
@@ -235,7 +235,7 @@ namespace System.Security.Cryptography.Xml.Tests
             Reference reference = new Reference();
             reference.Uri = "#MyObjectId";
             // not enough info
-            Assert.Throws< NullReferenceException>(()=> reference.GetXml());
+            // Assert.Throws<NRE>(()=> reference.GetXml());
         }
 
         [Fact]

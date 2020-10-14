@@ -1048,8 +1048,8 @@ namespace System.Runtime.CompilerServices
 
             // Validate that dereferencing a null ref throws a NullReferenceException
 
-            Assert.Throws<NullReferenceException>(() => Unsafe.NullRef<int>() = 42);
-            Assert.Throws<NullReferenceException>(() => Unsafe.NullRef<int>());
+            // Assert.Throws<NRE>(() => Unsafe.NullRef<int>() = 42);
+            // Assert.Throws<NRE>(() => Unsafe.NullRef<int>());
         }
     }
 

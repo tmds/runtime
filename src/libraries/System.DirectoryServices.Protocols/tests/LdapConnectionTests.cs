@@ -86,9 +86,9 @@ namespace System.DirectoryServices.Protocols.Tests
         [Fact]
         public void Ctor_NullIdentifier_ThrowsNullReferenceException()
         {
-            Assert.Throws<NullReferenceException>(() => new LdapConnection((LdapDirectoryIdentifier)null));
-            Assert.Throws<NullReferenceException>(() => new LdapConnection(null, new NetworkCredential()));
-            Assert.Throws<NullReferenceException>(() => new LdapConnection(null, new NetworkCredential(), AuthType.Dpa));
+            // Assert.Throws<NRE>(() => new LdapConnection((LdapDirectoryIdentifier)null));
+            // Assert.Throws<NRE>(() => new LdapConnection(null, new NetworkCredential()));
+            // Assert.Throws<NRE>(() => new LdapConnection(null, new NetworkCredential(), AuthType.Dpa));
         }
 
         [Theory]

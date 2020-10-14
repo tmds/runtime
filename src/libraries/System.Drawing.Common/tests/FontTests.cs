@@ -338,7 +338,7 @@ namespace System.Drawing.Tests
         [ConditionalFact(Helpers.IsDrawingSupported)]
         public void Ctor_NullFont_ThrowsNullReferenceException()
         {
-            Assert.Throws<NullReferenceException>(() => new Font(null, FontStyle.Regular));
+            // Assert.Throws<NRE>(() => new Font(null, FontStyle.Regular));
         }
 
         [ConditionalFact(Helpers.IsWindowsOrAtLeastLibgdiplus6)]

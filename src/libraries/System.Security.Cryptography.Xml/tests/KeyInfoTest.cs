@@ -348,7 +348,7 @@ namespace System.Security.Cryptography.Xml.Tests
             info.AddClause(null);
             Assert.Equal(1, info.Count);
             // but can't get XML out if it!
-            Assert.Throws<NullReferenceException>(() => info.GetXml());
+            // Assert.Throws<NRE>(() => info.GetXml());
         }
 
         [Fact]

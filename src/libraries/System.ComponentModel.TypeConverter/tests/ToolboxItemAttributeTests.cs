@@ -54,7 +54,7 @@ namespace System.ComponentModel
         [Fact]
         public void Ctor_NullToolboxItemTypeName_ThrowsArgumentNullException()
         {
-            AssertExtensions.Throws<ArgumentNullException, NullReferenceException>(() => new ToolboxItemAttribute((string)null));
+            // AssertExtensions.Throws<NRE, NRE>(() => new ToolboxItemAttribute((string)null));
         }
 
         [Theory]
@@ -72,7 +72,7 @@ namespace System.ComponentModel
         [Fact]
         public void Ctor_NullToolboxItemType_ThrowsNullReferenceException()
         {
-            AssertExtensions.Throws<ArgumentNullException, NullReferenceException>("toolboxItemType", () => new ToolboxItemAttribute((Type)null));
+            // AssertExtensions.Throws<NRE, NRE>("toolboxItemType", () => new ToolboxItemAttribute((Type)null));
         }
 
         [Fact]

@@ -46,7 +46,7 @@ namespace System.Security.Cryptography.Encryption.Tests.Asymmetric
                 Assert.Throws<NotSupportedException>(() => encryptStream.Position = 0);
                 Assert.Throws<NotSupportedException>(() => encryptStream.Seek(0, SeekOrigin.Begin));
                 Assert.Throws<NotSupportedException>(() => encryptStream.Read(new byte[0], 0, 0));
-                Assert.Throws<NullReferenceException>(() => encryptStream.Write(null, 0, 0)); // No arg validation on buffer?
+                // Assert.Throws<NRE>(() => encryptStream.Write(null, 0, 0)); // No arg validation on buffer?
                 Assert.Throws<ArgumentOutOfRangeException>(() => encryptStream.Write(new byte[0], -1, 0));
                 Assert.Throws<ArgumentOutOfRangeException>(() => encryptStream.Write(new byte[0], 0, -1));
                 Assert.Throws<ArgumentOutOfRangeException>(() => encryptStream.Write(new byte[0], 0, -1));
@@ -99,7 +99,7 @@ namespace System.Security.Cryptography.Encryption.Tests.Asymmetric
                 Assert.Throws<NotSupportedException>(() => decryptStream.Position = 0);
                 Assert.Throws<NotSupportedException>(() => decryptStream.Seek(0, SeekOrigin.Begin));
                 Assert.Throws<NotSupportedException>(() => decryptStream.Write(new byte[0], 0, 0));
-                Assert.Throws<NullReferenceException>(() => decryptStream.Read(null, 0, 0)); // No arg validation on buffer?
+                // Assert.Throws<NRE>(() => decryptStream.Read(null, 0, 0)); // No arg validation on buffer?
                 Assert.Throws<ArgumentOutOfRangeException>(() => decryptStream.Read(new byte[0], -1, 0));
                 Assert.Throws<ArgumentOutOfRangeException>(() => decryptStream.Read(new byte[0], 0, -1));
                 Assert.Throws<ArgumentOutOfRangeException>(() => decryptStream.Read(new byte[0], 0, -1));
