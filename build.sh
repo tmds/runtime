@@ -11,6 +11,8 @@ function is_cygwin_or_mingw()
   esac
 }
 
+sudo dnf -y install valgrind
+
 # resolve $SOURCE until the file is no longer a symlink
 while [[ -h $source ]]; do
   scriptroot="$( cd -P "$( dirname "$source" )" && pwd )"
