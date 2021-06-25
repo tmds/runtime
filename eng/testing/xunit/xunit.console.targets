@@ -7,7 +7,7 @@
 
   <PropertyGroup Condition="'$(TargetsMobile)' != 'true' and '$(TestSingleFile)' != 'true'">
     <_depsFileArgument Condition="'$(GenerateDependencyFile)' == 'true'">--depsfile $(AssemblyName).deps.json</_depsFileArgument>
-    <RunScriptCommand Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp'">valgrind "$(RunScriptHost)" exec --runtimeconfig $(AssemblyName).runtimeconfig.json $(_depsFileArgument) xunit.console.dll</RunScriptCommand>
+    <RunScriptCommand Condition="'$(TargetFrameworkIdentifier)' == '.NETCoreApp'">valgrind --track-origins=yes "$(RunScriptHost)" exec --runtimeconfig $(AssemblyName).runtimeconfig.json $(_depsFileArgument) xunit.console.dll</RunScriptCommand>
     <RunScriptCommand Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">xunit.console.exe</RunScriptCommand>
 
     <RunScriptCommand>$(RunScriptCommand) $(TargetFileName)</RunScriptCommand>
