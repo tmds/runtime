@@ -1008,35 +1008,6 @@ int32_t SystemNative_PosixFAdvise(intptr_t fd, int64_t offset, int64_t length, i
 #endif
 }
 
-int32_t SystemNative_FAllocate(intptr_t fd, int64_t offset, int64_t length)
-{
-    assert_msg(offset == 0, "Invalid offset value", (int)offset);
-
-    int fileDescriptor = ToFileDescriptor(fd);
-    int32_t result;
-#if HAVE_FALLOCATE // Linux
-    while ((result = fallocate(fileDescriptor, FALLOC_FL_KEEP_SIZE, (off_t)offset, (off_t)length)) == -1 && errno == EINTR);
-#elif defined(F_PREALLOCATE) // macOS
-    fstore_t fstore;
-    fstore.fst_flags = F_ALLOCATEALL; // Allocate all requested space or no space at all.
-    fstore.fst_posmode = F_PEOFPOSMODE; // Allocate from the physical end of file.
-    fstore.fst_offset = (off_t)offset;
-    fstore.fst_length = (off_t)length;
-    fstore.fst_bytesalloc = 0; // output size, can be > length
-
-    while ((result = fcntl(fileDescriptor, F_PREALLOCATE, &fstore)) == -1 && errno == EINTR);
-#else
-    (void)offset; // unused
-    (void)length; // unused
-    result = -1;
-    errno = EOPNOTSUPP;
-#endif
-
-    assert(result == 0 || errno != EINVAL);
-
-    return result;
-}
-
 int32_t SystemNative_Read(intptr_t fd, void* buffer, int32_t bufferSize)
 {
     return Common_Read(fd, buffer, bufferSize);

@@ -1459,9 +1459,6 @@
     <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.FILE_BASIC_INFO.cs">
       <Link>Common\Interop\Windows\Kernel32\Interop.FILE_BASIC_INFO.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.FILE_ALLOCATION_INFO.cs">
-      <Link>Common\Interop\Windows\Kernel32\Interop.FILE_ALLOCATION_INFO.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.FILE_END_OF_FILE_INFO.cs">
       <Link>Common\Interop\Windows\Kernel32\Interop.FILE_END_OF_FILE_INFO.cs</Link>
     </Compile>
@@ -2038,9 +2035,6 @@
     </Compile>
     <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.PosixFAdvise.cs">
       <Link>Common\Interop\Unix\System.Native\Interop.PosixFAdvise.cs</Link>
-    </Compile>
-    <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.FAllocate.cs">
-      <Link>Common\Interop\Unix\System.Native\Interop.FAllocate.cs</Link>
     </Compile>
     <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.PRead.cs">
       <Link>Common\Interop\Unix\System.Native\Interop.PRead.cs</Link>

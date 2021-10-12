@@ -9,7 +9,6 @@ namespace System.IO
         private FileAccess _access = FileAccess.Read;
         private FileShare _share = FileStream.DefaultShare;
         private FileOptions _options;
-        private long _preallocationSize;
         private int _bufferSize = FileStream.DefaultBufferSize;
 
         /// <summary>
@@ -85,18 +84,6 @@ namespace System.IO
 
                 _options = value;
             }
-        }
-
-        /// <summary>
-        /// The initial allocation size in bytes for the file. A positive value is effective only when a regular file is being created, overwritten, or replaced.
-        /// Negative values are not allowed.
-        /// In other cases (including the default 0 value), it's ignored.
-        /// </summary>
-        /// <exception cref="T:System.ArgumentOutOfRangeException">When <paramref name="value" /> is negative.</exception>
-        public long PreallocationSize
-        {
-            get => _preallocationSize;
-            set => _preallocationSize = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), SR.ArgumentOutOfRange_NeedNonNegNum);
         }
 
         /// <summary>

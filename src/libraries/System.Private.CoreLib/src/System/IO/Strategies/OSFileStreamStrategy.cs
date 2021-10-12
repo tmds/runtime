@@ -40,14 +40,14 @@ namespace System.IO.Strategies
             _fileHandle = handle;
         }
 
-        internal OSFileStreamStrategy(string path, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize)
+        internal OSFileStreamStrategy(string path, FileMode mode, FileAccess access, FileShare share, FileOptions options)
         {
             string fullPath = Path.GetFullPath(path);
 
             _access = access;
             _lengthCanBeCached = (share & FileShare.Write) == 0 && (access & FileAccess.Write) == 0;
 
-            _fileHandle = SafeFileHandle.Open(fullPath, mode, access, share, options, preallocationSize);
+            _fileHandle = SafeFileHandle.Open(fullPath, mode, access, share, options);
 
             try
             {

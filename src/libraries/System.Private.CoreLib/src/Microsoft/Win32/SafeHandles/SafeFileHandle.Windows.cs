@@ -26,18 +26,13 @@ namespace Microsoft.Win32.SafeHandles
 
         internal ThreadPoolBoundHandle? ThreadPoolBinding { get; set; }
 
-        internal static unsafe SafeFileHandle Open(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize)
+        internal static unsafe SafeFileHandle Open(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options)
         {
             using (DisableMediaInsertionPrompt.Create())
             {
                 // we don't use NtCreateFile as there is no public and reliable way
                 // of converting DOS to NT file paths (RtlDosPathNameToRelativeNtPathName_U_WithStatus is not documented)
                 SafeFileHandle fileHandle = CreateFile(fullPath, mode, access, share, options);
-
-                if (preallocationSize > 0)
-                {
-                    Preallocate(fullPath, preallocationSize, fileHandle);
-                }
 
                 if ((options & FileOptions.Asynchronous) != 0)
                 {
@@ -104,38 +99,6 @@ namespace Microsoft.Win32.SafeHandles
             fileHandle._path = fullPath;
             fileHandle._fileOptions = options;
             return fileHandle;
-        }
-
-        private static unsafe void Preallocate(string fullPath, long preallocationSize, SafeFileHandle fileHandle)
-        {
-            var allocationInfo = new Interop.Kernel32.FILE_ALLOCATION_INFO
-            {
-                AllocationSize = preallocationSize
-            };
-
-            if (!Interop.Kernel32.SetFileInformationByHandle(
-                fileHandle,
-                Interop.Kernel32.FileAllocationInfo,
-                &allocationInfo,
-                (uint)sizeof(Interop.Kernel32.FILE_ALLOCATION_INFO)))
-            {
-                int errorCode = Marshal.GetLastPInvokeError();
-
-                // Only throw for errors that indicate there is not enough space.
-                if (errorCode == Interop.Errors.ERROR_DISK_FULL ||
-                    errorCode == Interop.Errors.ERROR_FILE_TOO_LARGE)
-                {
-                    fileHandle.Dispose();
-
-                    // Delete the file we've created.
-                    Interop.Kernel32.DeleteFile(fullPath);
-
-                    throw new IOException(SR.Format(errorCode == Interop.Errors.ERROR_DISK_FULL
-                                                        ? SR.IO_DiskFull_Path_AllocationSize
-                                                        : SR.IO_FileTooLarge_Path_AllocationSize,
-                                            fullPath, preallocationSize));
-                }
-            }
         }
 
         internal void EnsureThreadPoolBindingInitialized()

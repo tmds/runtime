@@ -620,13 +620,6 @@ PALEXPORT int32_t SystemNative_Poll(PollEvent* pollEvents, uint32_t eventCount, 
 PALEXPORT int32_t SystemNative_PosixFAdvise(intptr_t fd, int64_t offset, int64_t length, int32_t advice);
 
 /**
- * Preallocates disk space.
- *
- * Returns 0 for success, -1 for failure. Sets errno on failure.
- */
-PALEXPORT int32_t SystemNative_FAllocate(intptr_t fd, int64_t offset, int64_t length);
-
-/**
  * Reads the number of bytes specified into the provided buffer from the specified, opened file descriptor.
  *
  * Returns the number of bytes read on success; otherwise, -1 is returned an errno is set.

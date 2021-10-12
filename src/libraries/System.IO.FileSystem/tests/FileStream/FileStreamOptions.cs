@@ -113,18 +113,6 @@ namespace System.IO.Tests
         }
 
         [Fact]
-        public void PreallocationSize()
-        {
-            Assert.Equal(0, new FileStreamOptions().PreallocationSize);
-
-            Assert.Equal(0, new FileStreamOptions { PreallocationSize = 0 }.PreallocationSize);
-            Assert.Equal(1, new FileStreamOptions { PreallocationSize = 1 }.PreallocationSize);
-            Assert.Equal(123, new FileStreamOptions { PreallocationSize = 123 }.PreallocationSize);
-
-            Assert.Throws<ArgumentOutOfRangeException>(() => new FileStreamOptions { PreallocationSize = -1 });
-        }
-
-        [Fact]
         public void BufferSize()
         {
             Assert.Equal(4096, new FileStreamOptions().BufferSize);

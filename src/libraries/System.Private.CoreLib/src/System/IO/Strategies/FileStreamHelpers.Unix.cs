@@ -11,8 +11,8 @@ namespace System.IO.Strategies
         private static OSFileStreamStrategy ChooseStrategyCore(SafeFileHandle handle, FileAccess access, bool isAsync) =>
             new UnixFileStreamStrategy(handle, access);
 
-        private static FileStreamStrategy ChooseStrategyCore(string path, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize) =>
-            new UnixFileStreamStrategy(path, mode, access, share, options, preallocationSize);
+        private static FileStreamStrategy ChooseStrategyCore(string path, FileMode mode, FileAccess access, FileShare share, FileOptions options) =>
+            new UnixFileStreamStrategy(path, mode, access, share, options);
 
         internal static long CheckFileCall(long result, string? path, bool ignoreNotSupported = false)
         {

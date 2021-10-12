@@ -232,11 +232,6 @@ check_symbol_exists(
     HAVE_POSIX_ADVISE)
 
 check_symbol_exists(
-    fallocate
-    fcntl.h
-    HAVE_FALLOCATE)
-
-check_symbol_exists(
     preadv
     sys/uio.h
     HAVE_PREADV)

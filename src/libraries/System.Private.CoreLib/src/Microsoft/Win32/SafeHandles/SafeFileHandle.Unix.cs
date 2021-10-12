@@ -155,7 +155,7 @@ namespace Microsoft.Win32.SafeHandles
             }
         }
 
-        internal static SafeFileHandle Open(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize)
+        internal static SafeFileHandle Open(string fullPath, FileMode mode, FileAccess access, FileShare share, FileOptions options)
         {
             // Translate the arguments into arguments for an open call.
             Interop.Sys.OpenFlags openFlags = PreOpenConfigurationFromOptions(mode, access, share, options);
@@ -178,7 +178,7 @@ namespace Microsoft.Win32.SafeHandles
 
                     // When Init return false, the path has changed to another file entry, and
                     // we need to re-open the path to reflect that.
-                    if (safeFileHandle.Init(fullPath, mode, access, share, options, preallocationSize))
+                    if (safeFileHandle.Init(fullPath, mode, access, share, options))
                     {
                         return safeFileHandle;
                     }
@@ -275,7 +275,7 @@ namespace Microsoft.Win32.SafeHandles
             return flags;
         }
 
-        private bool Init(string path, FileMode mode, FileAccess access, FileShare share, FileOptions options, long preallocationSize)
+        private bool Init(string path, FileMode mode, FileAccess access, FileShare share, FileOptions options)
         {
             Interop.Sys.FileStatus status = default;
             bool statusHasValue = false;
@@ -386,27 +386,6 @@ namespace Microsoft.Win32.SafeHandles
                         // truncated.  Ignore the error in such cases; in all others, throw.
                         throw Interop.GetExceptionForIoErrno(errorInfo, path, isDirectory: false);
                     }
-                }
-            }
-
-            if (preallocationSize > 0 && Interop.Sys.FAllocate(this, 0, preallocationSize) < 0)
-            {
-                Interop.ErrorInfo errorInfo = Interop.Sys.GetLastErrorInfo();
-
-                // Only throw for errors that indicate there is not enough space.
-                if (errorInfo.Error == Interop.Error.EFBIG ||
-                    errorInfo.Error == Interop.Error.ENOSPC)
-                {
-                    Dispose();
-
-                    // Delete the file we've created.
-                    Debug.Assert(mode == FileMode.Create || mode == FileMode.CreateNew);
-                    Interop.Sys.Unlink(path!);
-
-                    throw new IOException(SR.Format(errorInfo.Error == Interop.Error.EFBIG
-                                                        ? SR.IO_FileTooLarge_Path_AllocationSize
-                                                        : SR.IO_DiskFull_Path_AllocationSize,
-                                            path, preallocationSize));
                 }
             }
 

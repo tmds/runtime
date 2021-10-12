@@ -19,10 +19,10 @@ namespace System.IO.Strategies
             return WrapIfDerivedType(fileStream, strategy);
         }
 
-        internal static FileStreamStrategy ChooseStrategy(FileStream fileStream, string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options, long preallocationSize)
+        internal static FileStreamStrategy ChooseStrategy(FileStream fileStream, string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options)
         {
             FileStreamStrategy strategy =
-                EnableBufferingIfNeeded(ChooseStrategyCore(path, mode, access, share, options, preallocationSize), bufferSize);
+                EnableBufferingIfNeeded(ChooseStrategyCore(path, mode, access, share, options), bufferSize);
 
             return WrapIfDerivedType(fileStream, strategy);
         }
@@ -51,7 +51,7 @@ namespace System.IO.Strategies
             e is NotSupportedException ||
             (e is ArgumentException && !(e is ArgumentNullException));
 
-        internal static void ValidateArguments(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options, long preallocationSize)
+        internal static void ValidateArguments(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options)
         {
             if (path == null)
             {
@@ -93,10 +93,6 @@ namespace System.IO.Strategies
             {
                 ThrowHelper.ThrowArgumentOutOfRangeException_NeedNonNegNum(nameof(bufferSize));
             }
-            else if (preallocationSize < 0)
-            {
-                ThrowHelper.ThrowArgumentOutOfRangeException_NeedNonNegNum(nameof(preallocationSize));
-            }
 
             // Write access validation
             if ((access & FileAccess.Write) == 0)
@@ -113,29 +109,7 @@ namespace System.IO.Strategies
                 throw new ArgumentException(SR.Argument_InvalidAppendMode, nameof(access));
             }
 
-            if (preallocationSize > 0)
-            {
-                ValidateArgumentsForPreallocation(mode, access);
-            }
-
             SerializationGuard(access);
-        }
-
-        internal static void ValidateArgumentsForPreallocation(FileMode mode, FileAccess access)
-        {
-            // The user will be writing into the preallocated space.
-            if ((access & FileAccess.Write) == 0)
-            {
-                throw new ArgumentException(SR.Argument_InvalidPreallocateAccess, nameof(access));
-            }
-
-            // Only allow preallocation for newly created/overwritten files.
-            // When we fail to preallocate, we'll remove the file.
-            if (mode != FileMode.Create &&
-                mode != FileMode.CreateNew)
-            {
-                throw new ArgumentException(SR.Argument_InvalidPreallocateMode, nameof(mode));
-            }
         }
 
         internal static void SerializationGuard(FileAccess access)

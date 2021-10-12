@@ -23,9 +23,6 @@ namespace System.IO.Tests
         protected override FileStream CreateFileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options)
             => new FileStream(File.OpenHandle(path, mode, access, share, options), access, bufferSize, (options & FileOptions.Asynchronous) != 0);
 
-        protected override FileStream CreateFileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options, long preallocationSize)
-            => new FileStream(File.OpenHandle(path, mode, access, share, options, preallocationSize), access, bufferSize, (options & FileOptions.Asynchronous) != 0);
-
         [ActiveIssue("https://github.com/dotnet/runtime/issues/53432")]
         [Theory, MemberData(nameof(StreamSpecifiers))]
         public override void FileModeAppendExisting(string streamSpecifier)

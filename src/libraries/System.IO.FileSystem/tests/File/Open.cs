@@ -73,19 +73,6 @@ namespace System.IO.Tests
                     BufferSize = bufferSize
                 });
         }
-
-        protected override FileStream CreateFileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options, long preallocationSize)
-        {
-            return File.Open(path,
-                new FileStreamOptions {
-                    Mode = mode,
-                    Access = access,
-                    Share = share,
-                    Options = options,
-                    BufferSize = bufferSize,
-                    PreallocationSize = preallocationSize
-                });
-        }
     }
 
     public class File_OpenSpecial : FileStream_ctor_str_fm_fa_fs

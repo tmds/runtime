@@ -143,8 +143,10 @@ namespace System.IO
         }
 
         public FileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options)
-            : this(path, mode, access, share, bufferSize, options, 0)
         {
+            FileStreamHelpers.ValidateArguments(path, mode, access, share, bufferSize, options);
+
+            _strategy = FileStreamHelpers.ChooseStrategy(this, path, mode, access, share, bufferSize, options);
         }
 
         /// <summary>
@@ -160,11 +162,7 @@ namespace System.IO
         /// <exception cref="T:System.IO.FileNotFoundException">The file cannot be found, such as when <see cref="System.IO.FileStreamOptions.Mode" /> is <see langword="FileMode.Truncate" /> or <see langword="FileMode.Open" />, and the file specified by <paramref name="path" /> does not exist. The file must already exist in these modes.</exception>
         /// <exception cref="T:System.IO.IOException">An I/O error, such as specifying <see langword="FileMode.CreateNew" /> when the file specified by <paramref name="path" /> already exists, occurred.
         ///  -or-
-        ///  The stream has been closed.
-        ///  -or-
-        ///  The disk was full (when <see cref="System.IO.FileStreamOptions.PreallocationSize" /> was provided and <paramref name="path" /> was pointing to a regular file).
-        ///  -or-
-        ///  The file was too large (when <see cref="System.IO.FileStreamOptions.PreallocationSize" /> was provided and <paramref name="path" /> was pointing to a regular file).</exception>
+        ///  The stream has been closed.</exception>
         /// <exception cref="T:System.Security.SecurityException">The caller does not have the required permission.</exception>
         /// <exception cref="T:System.IO.DirectoryNotFoundException">The specified path is invalid, such as being on an unmapped drive.</exception>
         /// <exception cref="T:System.UnauthorizedAccessException">The <see cref="System.IO.FileStreamOptions.Access" /> requested is not permitted by the operating system for the specified <paramref name="path" />, such as when <see cref="System.IO.FileStreamOptions.Access" />  is <see cref="System.IO.FileAccess.Write" /> or <see cref="System.IO.FileAccess.ReadWrite" /> and the file or directory is set for read-only access.
@@ -197,22 +195,10 @@ namespace System.IO
                 }
             }
 
-            if (options.PreallocationSize > 0)
-            {
-                FileStreamHelpers.ValidateArgumentsForPreallocation(options.Mode, options.Access);
-            }
-
             FileStreamHelpers.SerializationGuard(options.Access);
 
             _strategy = FileStreamHelpers.ChooseStrategy(
-                this, path, options.Mode, options.Access, options.Share, options.BufferSize, options.Options, options.PreallocationSize);
-        }
-
-        private FileStream(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options, long preallocationSize)
-        {
-            FileStreamHelpers.ValidateArguments(path, mode, access, share, bufferSize, options, preallocationSize);
-
-            _strategy = FileStreamHelpers.ChooseStrategy(this, path, mode, access, share, bufferSize, options, preallocationSize);
+                this, path, options.Mode, options.Access, options.Share, options.BufferSize, options.Options);
         }
 
         [Obsolete("FileStream.Handle has been deprecated. Use FileStream's SafeFileHandle property instead.")]
