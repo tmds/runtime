@@ -83,8 +83,10 @@
              Link="Common\Interop\Unix\Interop.Libraries.cs" />
     <Compile Include="$(CommonPath)Interop\Unix\Interop.Errors.cs"
              Link="Common\Interop\Unix\Interop.Errors.cs" />
-    <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.GetEUid.cs"
-             Link="Common\Interop\Unix\Interop.GetEUid.cs" />
+    <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.GetUid.Common.cs"
+             Link="Common\Interop\Unix\Interop.GetUid.Common.cs" />
+    <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.GetUid.Unix.cs"
+             Link="Common\Interop\Unix\Interop.GetUid.Unix.cs" />
     <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.GetPwUid.cs"
              Link="Common\Interop\Unix\Interop.GetPwUid.cs" />
     <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.FChMod.cs"

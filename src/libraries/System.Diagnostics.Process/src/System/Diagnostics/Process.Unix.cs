@@ -17,9 +17,6 @@ namespace System.Diagnostics
     public partial class Process : IDisposable
     {
         private static volatile bool s_initialized;
-        private static uint s_euid;
-        private static uint s_egid;
-        private static uint[]? s_groups;
         private static readonly object s_initializedGate = new object();
         private static readonly ReaderWriterLockSlim s_processStartLock = new ReaderWriterLockSlim();
 
@@ -769,29 +766,47 @@ namespace System.Diagnostics
                 return false;
             }
 
-            Interop.Sys.Permissions permissions = (Interop.Sys.Permissions)fileinfo.Mode;
+            Interop.Sys.Permissions permissions = ((Interop.Sys.Permissions)fileinfo.Mode) & Interop.Sys.Permissions.S_IXUGO;
 
-            if (s_euid == 0)
+            // Avoid checking user/group when permission.
+            if (permissions == Interop.Sys.Permissions.S_IXUGO)
+            {
+                return true;
+            }
+            else if (permissions == 0)
+            {
+                return false;
+            }
+
+            uint euid = Interop.Sys.GetEUid();
+
+            if (euid == 0)
             {
                 // We're root.
                 return (permissions & Interop.Sys.Permissions.S_IXUGO) != 0;
             }
 
-            if (s_euid == fileinfo.Uid)
+            if (euid == fileinfo.Uid)
             {
                 // We own the file.
                 return (permissions & Interop.Sys.Permissions.S_IXUSR) != 0;
             }
 
-            if (s_egid == fileinfo.Gid ||
-                (s_groups != null && Array.BinarySearch(s_groups, fileinfo.Gid) >= 0))
+            bool groupCanExecute = (permissions & Interop.Sys.Permissions.S_IXGRP) != 0;
+            bool otherCanExecute = (permissions & Interop.Sys.Permissions.S_IXOTH) != 0;
+
+            // Avoid checking group when it has the same permission as other.
+            if (groupCanExecute == otherCanExecute)
             {
-                // A group we're a member of owns the file.
-                return (permissions & Interop.Sys.Permissions.S_IXGRP) != 0;
+                return groupCanExecute;
             }
 
-            // Other.
-            return (permissions & Interop.Sys.Permissions.S_IXOTH) != 0;
+            if (Interop.Sys.IsMemberOfGroup(fileinfo.Gid))
+            {
+                return groupCanExecute;
+            }
+
+            return otherCanExecute;
         }
 
         private static long s_ticksPerSecond;
@@ -1063,9 +1078,6 @@ namespace System.Diagnostics
                         throw new Win32Exception();
                     }
 
-                    s_euid = Interop.Sys.GetEUid();
-                    s_egid = Interop.Sys.GetEGid();
-                    s_groups = Interop.Sys.GetGroups();
                     if (s_groups != null)
                     {
                         Array.Sort(s_groups);

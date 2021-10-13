@@ -17,6 +17,28 @@ internal static partial class Interop
         internal const string RootPath = "/proc/";
         private const string StatusFileName = "/status";
 
+        [Flags]
+        internal enum Capabilities : uint
+        {
+            CAP_SETGID = 1 << 6,
+            CAP_SETUID = 1 << 7
+        }
+
+        private static readonly Lazy<Capabilities?> s_capabilities =
+            new Lazy<Capabilities?>(() =>
+            {
+                TryParseStatusFile($"{RootPath}self{StatusFileName}", out ParsedStatus result);
+
+                return result.CapPrm;
+            });
+
+        internal static bool TryGetPermittedCapabilities(out Capabilities capabilities)
+        {
+            Capabilities? parsedCapabilities = s_capabilities.Value;
+            capabilities = parsedCapabilities.HasValue ? parsedCapabilities.Value : default;
+            return parsedCapabilities.HasValue;
+        }
+
         internal struct ParsedStatus
         {
 #if DEBUG
@@ -28,6 +50,7 @@ internal static partial class Interop
             internal ulong VmSwap;
             internal ulong VmSize;
             internal ulong VmPeak;
+            internal Capabilities? CapPrm;
         }
 
         internal static string GetStatusFilePathForProcess(int pid) => string.Create(null, stackalloc char[256], $"{RootPath}{(uint)pid}{StatusFileName}");
@@ -100,6 +123,21 @@ internal static partial class Interop
                 {
                     valueParsed = ulong.TryParse(value[..^3], out ulong vmStack);
                     results.VmData += vmStack;
+                }
+                else if (name.SequenceEqual("CapPrm"))
+                {
+                    // Parse last bytes up to the length of the Capabilities enum.
+                    Debug.Assert(sizeof(Capabilities) == sizeof(uint));
+                    int hexLength = sizeof(uint) * 2;
+                    if (value.Length > hexLength)
+                    {
+                        value = value[^hexLength..];
+                    }
+
+                    if (valueParsed = uint.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint capprm))
+                    {
+                        results.CapPrm = (Capabilities)capprm;
+                    }
                 }
 
                 Debug.Assert(valueParsed);

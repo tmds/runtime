@@ -159,8 +159,10 @@
              Link="Common\Interop\Unix\Interop.Stat.Pipe.cs" />
     <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.GetPeerID.cs"
              Link="Common\Interop\Unix\Interop.GetPeerID.cs" />
-    <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.GetEUid.cs"
-             Link="Common\Interop\Unix\Interop.GetEUid.cs" />
+    <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.GetUid.Common.cs"
+             Link="Common\Interop\Unix\Interop.GetUid.Common.cs" />
+    <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.GetUid.Unix.cs"
+             Link="Common\Interop\Unix\Interop.GetUid.Unix.cs" />
     <Compile Include="$(CommonPath)Interop\Unix\System.Native\Interop.SetEUid.cs"
              Link="Common\Interop\Unix\Interop.SetEUid.cs" />
   </ItemGroup>

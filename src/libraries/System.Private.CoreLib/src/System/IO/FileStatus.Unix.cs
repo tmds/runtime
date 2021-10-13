@@ -30,13 +30,6 @@ namespace System.IO
         // Exists as of the last refresh
         private bool _exists;
 
-#if !TARGET_BROWSER
-        // Caching the euid/egid to avoid extra p/invokes
-        // Should get reset on refresh
-        private uint? _euid;
-        private uint? _egid;
-#endif
-
         private bool IsFileCacheInitialized => _initializedFileCache == 0;
 
         // Check if the main path (without following symlinks) has the hidden attribute set
@@ -58,34 +51,48 @@ namespace System.IO
                 {
                     return false;
                 }
-#if TARGET_BROWSER
-                const Interop.Sys.Permissions readBit = Interop.Sys.Permissions.S_IRUSR;
-                const Interop.Sys.Permissions writeBit = Interop.Sys.Permissions.S_IWUSR;
-#else
-                Interop.Sys.Permissions readBit, writeBit;
 
-                if (_fileCache.Uid == (_euid ??= Interop.Sys.GetEUid()))
+                var mode = (Interop.Sys.Permissions)(_fileCache.Mode & (int)Interop.Sys.Permissions.Mask);
+
+                bool isUserReadOnly = (mode & Interop.Sys.Permissions.S_IRUSR) != 0 && // has read permission
+                                      (mode & Interop.Sys.Permissions.S_IWUSR) == 0;   // but not write permission
+#if TARGET_BROWSER
+                return isUserReadOnly;
+#else
+                bool isGroupReadOnly = (mode & Interop.Sys.Permissions.S_IRGRP) != 0 && // has read permission
+                                       (mode & Interop.Sys.Permissions.S_IWGRP) == 0;   // but not write permission
+                bool isOtherReadOnly = (mode & Interop.Sys.Permissions.S_IROTH) != 0 && // has read permission
+                                       (mode & Interop.Sys.Permissions.S_IWOTH) == 0;   // but not write permission
+
+                // If they are all the same, no need to check user/group.
+                if ((isUserReadOnly == isGroupReadOnly) && (isGroupReadOnly == isOtherReadOnly))
                 {
-                    // User effectively owns the file
-                    readBit = Interop.Sys.Permissions.S_IRUSR;
-                    writeBit = Interop.Sys.Permissions.S_IWUSR;
+                    return isUserReadOnly;
                 }
-                else if (_fileCache.Gid == (_egid ??= Interop.Sys.GetEGid()))
+
+                if (_fileCache.Uid == Interop.Sys.GetEUid())
                 {
-                    // User belongs to a group that effectively owns the file
-                    readBit = Interop.Sys.Permissions.S_IRGRP;
-                    writeBit = Interop.Sys.Permissions.S_IWGRP;
+                    // User owns the file.
+                    return isUserReadOnly;
+                }
+
+                // System files often have the same permissions for group and other (umask 022).
+                if (isGroupReadOnly == isUserReadOnly)
+                {
+                    return isGroupReadOnly;
+                }
+
+                if (Interop.Sys.IsMemberOfGroup(_fileCache.Gid))
+                {
+                    // User belongs to group that owns the file.
+                    return isGroupReadOnly;
                 }
                 else
                 {
-                    // Others permissions
-                    readBit = Interop.Sys.Permissions.S_IROTH;
-                    writeBit = Interop.Sys.Permissions.S_IWOTH;
+                    // Other permissions.
+                    return isOtherReadOnly;
                 }
 #endif
-
-                return (_fileCache.Mode & (int)readBit)  != 0 && // has read permission
-                       (_fileCache.Mode & (int)writeBit) == 0;   // but not write permission
             }
         }
 
@@ -356,12 +363,6 @@ namespace System.IO
                 // and check again if the symlink path is a directory
                 _isDirectory = CacheHasDirectoryFlag(target);
             }
-
-#if !TARGET_BROWSER
-            // These are cached and used when retrieving the read-only attribute
-            _euid = null;
-            _egid = null;
-#endif
 
             _exists = true;
 

@@ -8,7 +8,13 @@ internal static partial class Interop
 {
     internal static partial class Sys
     {
-        internal static unsafe uint[]? GetGroups()
+        [DllImport(Libraries.SystemNative, EntryPoint = "SystemNative_GetEGid")]
+        private static extern uint SysGetEGid();
+
+        [DllImport(Libraries.SystemNative, EntryPoint = "SystemNative_GetEUid")]
+        private static extern uint SysGetEUid();
+
+        private static unsafe uint[]? GetGroups()
         {
             const int InitialGroupsLength =
 #if DEBUG
