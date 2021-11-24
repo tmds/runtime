@@ -509,13 +509,8 @@ namespace System.IO
                     case Interop.Error.ENOTDIR:
                         // When the top-level path is a symlink to a directory, delete the link.
                         // In other cases, throw because we expect path to be a real directory.
-                        if (topLevel)
+                        if (topLevel && DirectoryExists(fullPath))
                         {
-                            if (!DirectoryExists(fullPath))
-                            {
-                                throw Interop.GetExceptionForIoErrno(Interop.Error.ENOENT.Info(), fullPath, isDirectory: true);
-                            }
-
                             DeleteFile(fullPath);
                             return true;
                         }
