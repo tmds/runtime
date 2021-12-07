@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.Build.NoTargets">
   <PropertyGroup>
-    <SkipBuild Condition="'$(RuntimeFlavor)' != '$(PrimaryRuntimeFlavor)'">true</SkipBuild>
+    <SkipBuild Condition="'$(TargetsDotnetCore)' == 'false'">true</SkipBuild>
     <GenerateInstallers>true</GenerateInstallers>
     <ArchiveName>dotnet-hostfxr-internal</ArchiveName>
     <InstallerName>dotnet-hostfxr</InstallerName>
