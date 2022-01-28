@@ -108,12 +108,13 @@ namespace System.Net.Sockets
 
         private bool TryRegisterCore(IntPtr socketHandle, SocketAsyncContext context, out Interop.Error error)
         {
+            context.StackTrace = Environment.StackTrace;
             bool added = _handleToContextMap.TryAdd(socketHandle, new SocketAsyncContextWrapper(context));
             if (!added)
             {
                 // Using public SafeSocketHandle(IntPtr) a user can add the same handle
                 // from a different Socket instance.
-                throw new InvalidOperationException(SR.net_sockets_handle_already_used);
+                throw new InvalidOperationException($"Handle {socketHandle} is already registered at\n{GetStackTrace(socketHandle)}\n--\n");
             }
 
             error = Interop.Sys.TryChangeSocketEventRegistration(_port, socketHandle, Interop.Sys.SocketEvents.None,
@@ -125,6 +126,15 @@ namespace System.Net.Sockets
 
             _handleToContextMap.TryRemove(socketHandle, out _);
             return false;
+
+            string GetStackTrace(IntPtr socketHandle)
+            {
+                if (_handleToContextMap.TryGetValue(socketHandle, out SocketAsyncContextWrapper contextWrapper))
+                {
+                    return contextWrapper.Context.StackTrace ?? "??";
+                }
+                return "<not found>";
+            }
         }
 
         public void UnregisterSocket(IntPtr socketHandle)

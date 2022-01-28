@@ -44,6 +44,8 @@ namespace System.Net.Sockets
         private BufferMemorySendOperation? _cachedBufferMemorySendOperation;
         private BufferListSendOperation? _cachedBufferListSendOperation;
 
+        public string? StackTrace { get; set; }
+
         private void ReturnOperation(AcceptOperation operation)
         {
             operation.Reset();
