@@ -49,7 +49,7 @@ namespace System.Security.Cryptography.Xml.Tests
             Assert.Equal("http://www.w3.org/2000/09/xmldsig#sha1", SignedXml.XmlDsigSHA1Url);
         }
 
-        [ConditionalFact(typeof(SignatureSupport), nameof(SignatureSupport.SupportsRsaSha1Signatures))]
+        [Fact]
         public void Constructor_Empty()
         {
             XmlDocument doc = new XmlDocument();
@@ -441,7 +441,7 @@ namespace System.Security.Cryptography.Xml.Tests
             Assert.True(xel.InnerXml.StartsWith("<ObjectListTag"), "GetIdElement");
         }
 
-        [ConditionalFact(typeof(SignatureSupport), nameof(SignatureSupport.SupportsRsaSha1Signatures))]
+        [Fact]
         public void GetPublicKey()
         {
             XmlDocument doc = new XmlDocument();
