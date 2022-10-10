@@ -27,6 +27,20 @@
   </PropertyGroup>
 
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+  <ItemGroup Condition=" '$(DotNetBuildFromSource)' == 'true' AND '$(RunningPublish)' == 'true'" >
+    <KnownFrameworkReference Update="@(KnownFrameworkReference->WithMetadataValue('Identity', 'Microsoft.NETCore.App')->WithMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))">
+      <RuntimePackRuntimeIdentifiers>$(OutputRid)</RuntimePackRuntimeIdentifiers>
+    </KnownFrameworkReference>
+    <KnownRuntimePack Update="@(KnownRuntimePack->WithMetadataValue('Identity', 'Microsoft.NETCore.App')->WithMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))">
+      <RuntimePackRuntimeIdentifiers>$(OutputRid)</RuntimePackRuntimeIdentifiers>
+    </KnownRuntimePack>
+    <KnownAppHostPack Update="@(KnownAppHostPack->WithMetadataValue('Identity', 'Microsoft.NETCore.App')->WithMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))">
+      <AppHostRuntimeIdentifiers>$(OutputRid)</AppHostRuntimeIdentifiers>
+    </KnownAppHostPack>
+    <KnownCrossgen2Pack Update="@(KnownCrossgen2Pack->WithMetadataValue('Identity', 'Microsoft.NETCore.App.Crossgen2')->WithMetadataValue('TargetFramework', '$(NetCoreAppCurrent)'))">
+      <Crossgen2RuntimeIdentifiers>$(OutputRid)</Crossgen2RuntimeIdentifiers>
+    </KnownCrossgen2Pack>
+  </ItemGroup>
 
   <PropertyGroup Condition="'$(NativeAotSupported)' == 'true'">
     <IlcToolsPath>$(CoreCLRILCompilerDir)</IlcToolsPath>
