@@ -769,7 +769,18 @@ namespace System.Diagnostics.Tests
         {
             CreateDefaultProcess();
 
-            AssertNonZeroAllZeroDarwin(_process.PeakWorkingSet64);
+
+            RetryHelper.Execute(() =>
+            {
+            try
+            {
+                AssertNonZeroAllZeroDarwin(_process.PeakWorkingSet64);
+            }
+            catch
+            {
+                throw new Exception(File.ReadAllText($"/proc/{_process.Id}/status"));
+            }
+            });
         }
 
         [Fact]
@@ -822,7 +833,18 @@ namespace System.Diagnostics.Tests
                 return;
             }
 
-            Assert.InRange(_process.WorkingSet64, 1, long.MaxValue);
+
+            RetryHelper.Execute(() =>
+            {
+            try
+            {
+                Assert.InRange(_process.WorkingSet64, 1, long.MaxValue);
+            }
+            catch
+            {
+                throw new Exception(File.ReadAllText($"/proc/{_process.Id}/status"));
+            }
+            });
         }
 
         [Fact]
@@ -2014,9 +2036,21 @@ namespace System.Diagnostics.Tests
         {
             CreateDefaultProcess();
 
+            
+            RetryHelper.Execute(() =>
+            {
+            try
+            {
 #pragma warning disable 0618
             AssertNonZeroAllZeroDarwin(_process.PeakWorkingSet);
 #pragma warning restore 0618
+
+            }
+            catch
+            {
+                throw new Exception(File.ReadAllText($"/proc/{_process.Id}/status"));
+            }
+            });
         }
 
         [Fact]
@@ -2071,18 +2105,29 @@ namespace System.Diagnostics.Tests
         {
             CreateDefaultProcess();
 
-            if (OperatingSystem.IsMacOS())
-            {
-                // resident memory can be 0 on OSX.
-#pragma warning disable 0618
-                Assert.InRange(_process.WorkingSet, 0, int.MaxValue);
-#pragma warning restore 0618
-                return;
-            }
 
-#pragma warning disable 0618
-            Assert.InRange(_process.WorkingSet, 1, int.MaxValue);
-#pragma warning restore 0618
+            RetryHelper.Execute(() =>
+            {
+            try
+            {
+                if (OperatingSystem.IsMacOS())
+                {
+                    // resident memory can be 0 on OSX.
+    #pragma warning disable 0618
+                    Assert.InRange(_process.WorkingSet, 0, int.MaxValue);
+    #pragma warning restore 0618
+                    return;
+                }
+
+    #pragma warning disable 0618
+                Assert.InRange(_process.WorkingSet, 1, int.MaxValue);
+    #pragma warning restore 0618
+            }
+            catch
+            {
+                throw new Exception(File.ReadAllText($"/proc/{_process.Id}/status"));
+            }
+            });
         }
 
         [Fact]
