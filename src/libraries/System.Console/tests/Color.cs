@@ -116,6 +116,10 @@ public class Color
             bool expectedEscapes = envVar is not null && (envVar == "1" || envVar.Equals("true", StringComparison.OrdinalIgnoreCase));
 
             string stdout = remote.Process.StandardOutput.ReadToEnd();
+
+            string envvars = string.Join("\n", psi.Environment.Select(i => $"{i.Key}={i.Value}"));
+            Assert.Equal("", stdout+'\n'+envvars);
+
             string[] parts = stdout.Split("SEPARATOR");
             Assert.Equal(3, parts.Length);
 
