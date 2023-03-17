@@ -259,6 +259,7 @@ namespace System.Globalization
 
                     case ' ':
                     case '\u00A0':
+                    case '\u202F':
                         // Convert nonbreaking spaces into regular spaces
                         result[resultPos++] = ' ';
                         break;
