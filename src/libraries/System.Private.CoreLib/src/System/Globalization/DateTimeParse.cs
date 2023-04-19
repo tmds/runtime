@@ -4354,7 +4354,7 @@ new DS[] { DS.ERROR,  DS.TX_NNN,  DS.TX_NNN,  DS.TX_NNN,  DS.ERROR,   DS.ERROR, 
 
                     for (int i = 0; i < quotedSpan.Length; i++)
                     {
-                        if (quotedSpan[i] == ' ' && parseInfo.fAllowInnerWhite)
+                        if (IsInnerWhiteSpaceFormatChar(quotedSpan[i]) && parseInfo.fAllowInnerWhite)
                         {
                             str.SkipWhiteSpaces();
                         }
@@ -4430,7 +4430,7 @@ new DS[] { DS.ERROR,  DS.TX_NNN,  DS.TX_NNN,  DS.TX_NNN,  DS.ERROR,   DS.ERROR, 
                     }
                     break;
                 default:
-                    if (ch == ' ')
+                    if (IsInnerWhiteSpaceFormatChar(ch)) // here
                     {
                         if (parseInfo.fAllowInnerWhite)
                         {
@@ -4492,6 +4492,8 @@ new DS[] { DS.ERROR,  DS.TX_NNN,  DS.TX_NNN,  DS.TX_NNN,  DS.ERROR,   DS.ERROR, 
             } // switch
             return true;
         }
+
+        private static bool IsInnerWhiteSpaceFormatChar(char c) => c == ' ' || c == '\u00a0' || c == '\u202f';
 
         //
         // The pos should point to a quote character. This method will
