@@ -446,15 +446,17 @@ namespace System.Formats.Tar
             using TarReader reader = new TarReader(source, leaveOpen);
 
             SortedDictionary<string, UnixFileMode>? pendingModes = TarHelpers.CreatePendingModesDictionary();
+            Stack<(string, DateTimeOffset)> directoryModificationTimes = new();
             TarEntry? entry;
             while ((entry = reader.GetNextEntry()) != null)
             {
                 if (entry.EntryType is not TarEntryType.GlobalExtendedAttributes)
                 {
-                    entry.ExtractRelativeToDirectory(destinationDirectoryPath, overwriteFiles, pendingModes);
+                    entry.ExtractRelativeToDirectory(destinationDirectoryPath, overwriteFiles, pendingModes, directoryModificationTimes);
                 }
             }
             TarHelpers.SetPendingModes(pendingModes);
+            TarHelpers.SetPendingModificationTimes(directoryModificationTimes);
         }
 
         // Asynchronously extracts the contents of a tar file into the specified directory.
@@ -486,6 +488,7 @@ namespace System.Formats.Tar
             cancellationToken.ThrowIfCancellationRequested();
 
             SortedDictionary<string, UnixFileMode>? pendingModes = TarHelpers.CreatePendingModesDictionary();
+            Stack<(string, DateTimeOffset)> directoryModificationTimes = new();
             TarReader reader = new TarReader(source, leaveOpen);
             await using (reader.ConfigureAwait(false))
             {
@@ -494,11 +497,12 @@ namespace System.Formats.Tar
                 {
                     if (entry.EntryType is not TarEntryType.GlobalExtendedAttributes)
                     {
-                        await entry.ExtractRelativeToDirectoryAsync(destinationDirectoryPath, overwriteFiles, pendingModes, cancellationToken).ConfigureAwait(false);
+                        await entry.ExtractRelativeToDirectoryAsync(destinationDirectoryPath, overwriteFiles, pendingModes, directoryModificationTimes, cancellationToken).ConfigureAwait(false);
                     }
                 }
             }
             TarHelpers.SetPendingModes(pendingModes);
+            TarHelpers.SetPendingModificationTimes(directoryModificationTimes);
         }
 
         [Conditional("DEBUG")]

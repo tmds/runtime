@@ -285,13 +285,14 @@ namespace System.Formats.Tar
         internal abstract bool IsDataStreamSetterSupported();
 
         // Extracts the current entry to a location relative to the specified directory.
-        internal void ExtractRelativeToDirectory(string destinationDirectoryPath, bool overwrite, SortedDictionary<string, UnixFileMode>? pendingModes)
+        internal void ExtractRelativeToDirectory(string destinationDirectoryPath, bool overwrite, SortedDictionary<string, UnixFileMode>? pendingModes, Stack<(string, DateTimeOffset)> directoryModificationTimes)
         {
             (string fileDestinationPath, string? linkTargetPath) = GetDestinationAndLinkPaths(destinationDirectoryPath);
 
             if (EntryType == TarEntryType.Directory)
             {
                 TarHelpers.CreateDirectory(fileDestinationPath, Mode, pendingModes);
+                TarHelpers.UpdatePendingModificationTimes(directoryModificationTimes, fileDestinationPath, ModificationTime);
             }
             else
             {
@@ -302,7 +303,7 @@ namespace System.Formats.Tar
         }
 
         // Asynchronously extracts the current entry to a location relative to the specified directory.
-        internal Task ExtractRelativeToDirectoryAsync(string destinationDirectoryPath, bool overwrite, SortedDictionary<string, UnixFileMode>? pendingModes, CancellationToken cancellationToken)
+        internal Task ExtractRelativeToDirectoryAsync(string destinationDirectoryPath, bool overwrite, SortedDictionary<string, UnixFileMode>? pendingModes, Stack<(string, DateTimeOffset)> directoryModificationTimes, CancellationToken cancellationToken)
         {
             if (cancellationToken.IsCancellationRequested)
             {
@@ -314,6 +315,7 @@ namespace System.Formats.Tar
             if (EntryType == TarEntryType.Directory)
             {
                 TarHelpers.CreateDirectory(fileDestinationPath, Mode, pendingModes);
+                TarHelpers.UpdatePendingModificationTimes(directoryModificationTimes, fileDestinationPath, ModificationTime);
                 return Task.CompletedTask;
             }
             else
@@ -564,7 +566,7 @@ namespace System.Formats.Tar
             AttemptSetLastWriteTime(destinationFileName, ModificationTime);
         }
 
-        private static void AttemptSetLastWriteTime(string destinationFileName, DateTimeOffset lastWriteTime)
+        internal static void AttemptSetLastWriteTime(string destinationFileName, DateTimeOffset lastWriteTime)
         {
             try
             {

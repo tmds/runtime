@@ -68,7 +68,41 @@ namespace System.Formats.Tar.Tests
             TarFile.ExtractToDirectory(sourceFileName: tarFile, destinationDirectoryName: outDir, overwriteFiles: false);
 
             Assert.True(File.Exists(outFile));
-            Assert.InRange(File.GetLastWriteTime(outFile).Ticks, dt.AddSeconds(-3).Ticks, dt.AddSeconds(3).Ticks); // include some slop for filesystem granularity
+            Assert.InRange(File.GetLastWriteTime(inFile).Ticks, dt.AddSeconds(-3).Ticks, dt.AddSeconds(3).Ticks); // include some slop for filesystem granularity
+        }
+
+        [Fact]
+        public void SetsLastModifiedTimeOnExtractedDirectories()
+        {
+            using TempDirectory root = new TempDirectory();
+
+            // Create a directory 'dir' with a specific last write time.
+            // We add some child directories and files to 'dir' to verify extracting those does not affect the final last write time on the directory.
+            DirectoryInfo inDir, targetDir;
+            foreach (var directoryInfo in new DirectoryInfo[]
+                        {
+                            inDir = Directory.CreateDirectory(Path.Combine(root.Path, "indir")), // 'indir'
+                            targetDir = Directory.CreateDirectory(Path.Combine(root.Path, "indir", "dir")), // 'indir/dir'
+                            Directory.CreateDirectory(Path.Combine(root.Path, "indir", "dir", "child")),    // 'indir/dir/child'
+                            Directory.CreateDirectory(Path.Combine(root.Path, "indir", "dir", Path.Combine("child", "subchild"))), // 'indir/dir/child/subChild'
+                        })
+            {
+                // Add a file to each directory.
+                File.Create(Path.Combine(directoryInfo.FullName, "file")).Dispose();
+            }
+            var dt = new DateTime(2001, 1, 2, 3, 4, 5, DateTimeKind.Local);
+            targetDir.LastWriteTime = dt;
+
+            string tarFile = Path.Join(root.Path, "file.tar");
+            TarFile.CreateFromDirectory(sourceDirectoryName: inDir.FullName, destinationFileName: tarFile, includeBaseDirectory: false);
+
+            string outDir = Path.Join(root.Path, "outdir");
+            Directory.CreateDirectory(outDir);
+            TarFile.ExtractToDirectory(sourceFileName: tarFile, destinationDirectoryName: outDir, overwriteFiles: false);
+
+            string targetOutDirectory = Path.Join(outDir, "dir");
+            Assert.True(Directory.Exists(targetOutDirectory));
+            Assert.InRange(Directory.GetLastWriteTime(targetOutDirectory).Ticks, dt.AddSeconds(-3).Ticks, dt.AddSeconds(3).Ticks); // include some slop for filesystem granularity
         }
 
         [Theory]

@@ -386,5 +386,60 @@ namespace System.Formats.Tar
 
             throw new ArgumentException(SR.Format(SR.TarEntryTypeNotSupportedInFormat, entryType, archiveFormat), paramName);
         }
+
+        public static void SetPendingModificationTimes(Stack<(string, DateTimeOffset)> directoryModificationTimes)
+        {
+            // note: these are ordered from child to parent.
+            while (directoryModificationTimes.TryPop(out (string Path, DateTimeOffset Modified) item))
+            {
+                TarEntry.AttemptSetLastWriteTime(item.Path, item.Modified);
+            }
+        }
+
+        public static void UpdatePendingModificationTimes(Stack<(string, DateTimeOffset)> directoryModificationTimes, string fullPath, DateTimeOffset modified)
+        {
+            // We can't set the modification time when we create the directory because extracting entries into it
+            // will cause that time to change. Instead, we track the times to set them later.
+
+            // We take into account that regular tar files are ordered.
+            // So when we see a new directory which is not a child of the previous directory
+            // we can set the parent directory timestamps, and stop tracking them.
+            // This avoids having to track all directory entries until we've finished extracting.
+            while (directoryModificationTimes.TryPeek(out (string Path, DateTimeOffset Modified) previous) &&
+                   !IsChildPath(previous.Path, fullPath))
+            {
+                directoryModificationTimes.TryPop(out previous);
+                TarEntry.AttemptSetLastWriteTime(previous.Path, previous.Modified);
+            }
+
+            directoryModificationTimes.Push((fullPath, modified));
+        }
+
+        private static bool IsChildPath(string parent, string path)
+        {
+            if (IsDirectorySeparatorChar(parent[^1]))
+            {
+                // The child needs to be at least a char longer than the parent.
+                if (path.Length <= parent.Length)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                // The child needs to be at least 2 chars longer than the parent,
+                // and the first char must be a directory separator.
+                if ((path.Length < parent.Length + 2) ||
+                    !IsDirectorySeparatorChar(path[parent.Length]))
+                {
+                    return false;
+                }
+            }
+
+            return path.StartsWith(parent, PathInternal.StringComparison);
+
+            static bool IsDirectorySeparatorChar(char c)
+                => c ==  Path.DirectorySeparatorChar || c ==  Path.AltDirectorySeparatorChar;
+        }
     }
 }
