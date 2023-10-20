@@ -46,7 +46,18 @@ The main types provided by this library are:
 
 ## Additional Documentation
 
+<<<<<<< HEAD
 * [API documentation](https://learn.microsoft.com/en-us/dotnet/api/system.numerics.tensors)
+=======
+<!-- Links to further documentation. Remove conceptual documentation if not available for the library. -->
+
+* [Conceptual documentation](https://learn.microsoft.com/dotnet/standard/serialization/**LIBRARYNAME**/overview)
+* [API documentation](https://learn.microsoft.com/dotnet/api/**LIBRARYNAME**)
+
+## Related Packages
+
+<!-- The related packages associated with this package -->
+>>>>>>> a1caacf2941 (Remove en-us culture code from URIs)
 
 ## Feedback & Contributing
 
