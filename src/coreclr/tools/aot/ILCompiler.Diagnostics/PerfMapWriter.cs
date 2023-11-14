@@ -74,34 +74,7 @@ namespace ILCompiler.Diagnostics
 
         public static byte[] PerfMapV1SignatureHelper(IEnumerable<AssemblyInfo> inputAssemblies, TargetDetails details)
         {
-            IEnumerable<AssemblyInfo> orderedInputs = inputAssemblies.OrderBy(asm => asm.Name, StringComparer.OrdinalIgnoreCase);
-            List<byte> inputHash = new List<byte>();
-            foreach (AssemblyInfo inputAssembly in orderedInputs)
-            {
-                inputHash.AddRange(inputAssembly.Mvid.ToByteArray());
-            }
-
-            PerfmapTokensForTarget targetTokens = TranslateTargetDetailsToPerfmapConstants(details);
-
-            byte[] buffer = new byte[12];
-            if (!BitConverter.TryWriteBytes(buffer.AsSpan(0, sizeof(uint)), (uint)targetTokens.OperatingSystem)
-                || !BitConverter.TryWriteBytes(buffer.AsSpan(4, sizeof(uint)), (uint)targetTokens.Architecture)
-                || !BitConverter.TryWriteBytes(buffer.AsSpan(8, sizeof(uint)), (uint)targetTokens.Abi))
-            {
-                throw new InvalidOperationException();
-            }
-
-            if (!BitConverter.IsLittleEndian)
-            {
-                buffer.AsSpan(0, sizeof(uint)).Reverse();
-                buffer.AsSpan(4, sizeof(uint)).Reverse();
-                buffer.AsSpan(8, sizeof(uint)).Reverse();
-            }
-
-            inputHash.AddRange(buffer);
-            byte[] hash = MD5.HashData(inputHash.ToArray());
-
-            return hash;
+            return new byte[16];
         }
 
         internal record struct PerfmapTokensForTarget(PerfMapOSToken OperatingSystem, PerfMapArchitectureToken Architecture, PerfMapAbiToken Abi);
