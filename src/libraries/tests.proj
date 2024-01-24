@@ -83,6 +83,11 @@
     <!-- <ProjectExclusions Include="$(MSBuildThisFileDirectory)System.Text.Json\tests\System.Text.Json.Tests\System.Text.Json.Tests.csproj" /> -->
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectExclusions Include="$(MSBuildThisFileDirectory)System.Numerics.Tensors\tests\System.Numerics.Tensors.Tests.csproj" />
+    <ProjectExclusions Include="$(MSBuildThisFileDirectory)System.Numerics.Tensors\tests\Net8Tests\System.Numerics.Tensors.Net8.Tests.csproj" />
+  </ItemGroup>
+
   <!-- invariant project cannot be tested in hybrid mode; projects using functions that throw PNSE too often to block separate tests (HashCode, CompareOptions) -->
   <ItemGroup Condition="'$(TargetOS)' == 'browser' and '$(HybridGlobalization)' == 'true'">
     <ProjectExclusions Include="$(MSBuildThisFileDirectory)System.Runtime\tests\System.Globalization.Tests\Invariant\Invariant.Tests.csproj" />
