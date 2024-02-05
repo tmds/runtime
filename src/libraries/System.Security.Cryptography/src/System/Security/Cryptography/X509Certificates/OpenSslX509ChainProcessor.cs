@@ -357,6 +357,7 @@ namespace System.Security.Cryptography.X509Certificates
             X509RevocationMode revocationMode,
             X509RevocationFlag revocationFlag)
         {
+            Console.WriteLine($"ProcessRevocation {revocationMode} {revocationFlag}");
             int chainSize;
             int revocationSize;
 
@@ -387,6 +388,7 @@ namespace System.Security.Cryptography.X509Certificates
                 {
                     for (int i = 0; i < revocationSize; i++)
                     {
+                        Console.WriteLine($"i = {i}");
                         if (i == 0 && Interop.Crypto.X509ChainHasStapledOcsp(_storeCtx))
                         {
                             if (OpenSslX509ChainEventSource.Log.IsEnabled())
@@ -396,6 +398,7 @@ namespace System.Security.Cryptography.X509Certificates
                         }
                         else
                         {
+                            Console.WriteLine($"X509UpRef");
                             using (SafeX509Handle cert =
                                 Interop.Crypto.X509UpRef(Interop.Crypto.GetX509StackField(chainStack, i)))
                             {
@@ -412,9 +415,11 @@ namespace System.Security.Cryptography.X509Certificates
 
                 Interop.Crypto.X509StoreSetRevocationFlag(_store, revocationFlag);
                 Interop.Crypto.X509StoreCtxRebuildChain(_storeCtx);
+                Console.WriteLine("X509StoreCtxRebuildChain");
             }
 
             Interop.Crypto.X509VerifyStatusCode errorCode = Interop.Crypto.X509StoreCtxGetError(_storeCtx);
+            Console.WriteLine($"X509StoreCtxGetError is {errorCode}");
 
             if (OpenSslX509ChainEventSource.Log.IsEnabled())
             {
