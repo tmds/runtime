@@ -40,6 +40,7 @@ namespace System.Security.Cryptography.X509Certificates
             }
 
             string? url = GetCdpUrl(cert);
+            Console.WriteLine($"AddCrlForCertificate {url}");
 
             if (url == null)
             {
@@ -47,6 +48,7 @@ namespace System.Security.Cryptography.X509Certificates
             }
 
             string crlFileName = GetCrlFileName(cert, url);
+            Console.WriteLine($"crlFileName {crlFileName}");
 
             if (OpenSslX509ChainEventSource.Log.IsEnabled())
             {
@@ -206,6 +208,7 @@ namespace System.Security.Cryptography.X509Certificates
             SafeX509StoreHandle store,
             TimeSpan downloadTimeout)
         {
+            Console.WriteLine($"DownloadAndAddCrl {url} {crlFileName}");
             // X509_STORE_add_crl will increase the refcount on the CRL object, so we should still
             // dispose our copy.
             using (SafeX509CrlHandle? crl = OpenSslCertificateAssetDownloader.DownloadCrl(url, downloadTimeout))
@@ -213,8 +216,10 @@ namespace System.Security.Cryptography.X509Certificates
                 // null is a valid return (e.g. no remainingDownloadTime)
                 if (crl != null && !crl.IsInvalid)
                 {
+                    Console.WriteLine("crl != null && !crl.IsInvalid");
                     if (!Interop.Crypto.X509StoreAddCrl(store, crl))
                     {
+                        Console.WriteLine("X509StoreAddCrl failed");
                         // Ignore error "cert already in store", throw on anything else. In any case the error queue will be cleared.
                         if (X509_R_CERT_ALREADY_IN_HASH_TABLE == Interop.Crypto.ErrPeekLastError())
                         {
