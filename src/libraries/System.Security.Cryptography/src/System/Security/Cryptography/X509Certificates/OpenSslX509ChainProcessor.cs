@@ -358,6 +358,7 @@ namespace System.Security.Cryptography.X509Certificates
             X509RevocationFlag revocationFlag)
         {
             Console.WriteLine($"ProcessRevocation {revocationMode} {revocationFlag}");
+            Console.WriteLine(Environment.StackTrace);
             int chainSize;
             int revocationSize;
 
@@ -419,7 +420,7 @@ namespace System.Security.Cryptography.X509Certificates
             }
 
             Interop.Crypto.X509VerifyStatusCode errorCode = Interop.Crypto.X509StoreCtxGetError(_storeCtx);
-            Console.WriteLine($"X509StoreCtxGetError is {errorCode}");
+            Console.WriteLine($"X509StoreCtxGetError is {errorCode.Code}");
 
             if (OpenSslX509ChainEventSource.Log.IsEnabled())
             {
