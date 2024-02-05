@@ -179,7 +179,8 @@ namespace System.Security.Cryptography.X509Certificates
                     // processing revocation.
                     if (status != Interop.Crypto.X509VerifyStatusCode.X509_V_OK &&
                         status != Interop.Crypto.X509VerifyStatusCodeUniversal.X509_V_ERR_CERT_NOT_YET_VALID &&
-                        status != Interop.Crypto.X509VerifyStatusCodeUniversal.X509_V_ERR_CERT_HAS_EXPIRED)
+                        status != Interop.Crypto.X509VerifyStatusCodeUniversal.X509_V_ERR_CERT_HAS_EXPIRED &&
+                        status != Interop.Crypto.X509VerifyStatusCodeUniversal.X509_V_ERR_CERT_SIGNATURE_FAILURE)
                     {
                         if (OpenSslX509ChainEventSource.Log.IsEnabled())
                         {
