@@ -122,7 +122,11 @@ namespace System.Security.Cryptography.X509Certificates
                 verificationTime,
                 downloadTimeout);
 
+            Console.WriteLine($"extraStore {extraStore?.Count} {customTrustStore?.Count} {trustMode}");
+
             Interop.Crypto.X509VerifyStatusCode status = chainPal.FindFirstChain(extraStore);
+
+            Console.WriteLine($"status = {status.Code}");
 
             if (OpenSslX509ChainEventSource.Log.IsEnabled())
             {
