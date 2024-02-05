@@ -85,6 +85,7 @@ namespace System.Security.Cryptography.X509Certificates
             TimeSpan timeout,
             bool disableAia)
         {
+            Console.WriteLine("BuildChainCore");
             if (timeout == TimeSpan.Zero)
             {
                 // An input value of 0 on the timeout is treated as 15 seconds, to match Windows.
@@ -168,6 +169,7 @@ namespace System.Security.Cryptography.X509Certificates
             {
                 if (OpenSslX509ChainProcessor.IsCompleteChain(status))
                 {
+                    Console.WriteLine($"IsCompleteChain {status.Code}");
                     // Checking the validity period for the certificates in the chain is done after the
                     // check for a trusted root, so accept expired (or not yet valid) as acceptable for
                     // processing revocation.
@@ -180,6 +182,7 @@ namespace System.Security.Cryptography.X509Certificates
                             OpenSslX509ChainEventSource.Log.UntrustedChainWithRevocation();
                         }
 
+                        Console.WriteLine($"NoCheck");
                         revocationMode = X509RevocationMode.NoCheck;
                     }
 
