@@ -358,7 +358,7 @@ namespace System.Security.Cryptography.X509Certificates
             X509RevocationFlag revocationFlag)
         {
             Console.WriteLine($"ProcessRevocation {revocationMode} {revocationFlag}");
-            Console.WriteLine(Environment.StackTrace);
+            // Console.WriteLine(Environment.StackTrace);
             int chainSize;
             int revocationSize;
 

@@ -85,7 +85,7 @@ namespace System.Security.Cryptography.X509Certificates
             TimeSpan timeout,
             bool disableAia)
         {
-            Console.WriteLine("BuildChainCore");
+            Console.WriteLine($"BuildChainCore {revocationFlag}");
             if (timeout == TimeSpan.Zero)
             {
                 // An input value of 0 on the timeout is treated as 15 seconds, to match Windows.

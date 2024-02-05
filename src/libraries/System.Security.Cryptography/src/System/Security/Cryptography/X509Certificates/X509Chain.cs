@@ -93,6 +93,8 @@ namespace System.Security.Cryptography.X509Certificates
 
         internal bool Build(X509Certificate2 certificate, bool throwOnException)
         {
+            Console.WriteLine($"Build for {certificate.SubjectName.Name}");
+            Console.WriteLine(Environment.StackTrace);
             lock (_syncRoot)
             {
                 if (certificate == null || certificate.Pal == null)
