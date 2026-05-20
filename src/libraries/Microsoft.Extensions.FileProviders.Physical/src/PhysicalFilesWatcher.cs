@@ -34,14 +34,7 @@ namespace Microsoft.Extensions.FileProviders.Physical
         private readonly object _fileWatcherLock = new();
         private readonly string _root;
         private readonly ExclusionFilters _filters;
-        // True when the FileSystemWatcher watches a strict ancestor of _root (rather than _root
-        // itself). In that case IncludeSubdirectories must always be true so that events occurring
-        // inside _root (which is below the FSW's watched path) are observed.
-        private readonly bool _fileWatcherIsAboveRoot;
-        // Number of currently registered tokens whose pattern requires watching subdirectories.
-        // Maintained as tokens are added and removed so we don't iterate the lookups when
-        // re-evaluating IncludeSubdirectories.
-        private int _subdirectoryRequiringTokenCount;
+        private int _includeSubdirectoryCount;
 
         // A single non-recursive watcher used when _root does not exist.
         // Watches for _root to be created, then enables the main FileSystemWatcher.
@@ -122,9 +115,13 @@ namespace Microsoft.Extensions.FileProviders.Physical
 
                     // If the FSW watches an ancestor of _root, every event of interest occurs
                     // in a subdirectory from the FSW's perspective, so subdirectory watching
-                    // is required to observe any of them.
-                    _fileWatcherIsAboveRoot = !watcherFullPath.Equals(_root, StringComparison.OrdinalIgnoreCase) &&
-                        _root.StartsWith(watcherFullPath, StringComparison.OrdinalIgnoreCase);
+                    // is required to observe any of them. Seed the counter with 1 so that
+                    // IncludeSubdirectories stays true regardless of registered tokens.
+                    if (!watcherFullPath.Equals(_root, StringComparison.OrdinalIgnoreCase) &&
+                        _root.StartsWith(watcherFullPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _includeSubdirectoryCount = 1;
+                    }
                 }
 
                 _fileWatcher = fileSystemWatcher;
@@ -208,9 +205,9 @@ namespace Microsoft.Extensions.FileProviders.Physical
                 // GetOrAdd may not have actually added our entry if another thread won the race.
                 // Compare by reference to detect whether our entry was the one stored.
                 if (ReferenceEquals(tokenInfo.TokenSource, cancellationTokenSource) &&
-                    FilePathRequiresSubdirectories(filePath))
+                    RequiresSubdirectories(filePath))
                 {
-                    Interlocked.Increment(ref _subdirectoryRequiringTokenCount);
+                    Interlocked.Increment(ref _includeSubdirectoryCount);
                 }
             }
 
@@ -252,9 +249,9 @@ namespace Microsoft.Extensions.FileProviders.Physical
                 tokenInfo = _wildcardTokenLookup.GetOrAdd(pattern, newTokenInfo);
 
                 if (ReferenceEquals(tokenInfo.TokenSource, cancellationTokenSource) &&
-                    WildcardRequiresSubdirectories(pattern))
+                    RequiresSubdirectories(pattern))
                 {
-                    Interlocked.Increment(ref _subdirectoryRequiringTokenCount);
+                    Interlocked.Increment(ref _includeSubdirectoryCount);
                 }
             }
 
@@ -374,20 +371,20 @@ namespace Microsoft.Extensions.FileProviders.Physical
         private void OnError(object sender, ErrorEventArgs e)
         {
             // Notify all cache entries on error.
-            CancelAll(_filePathTokenLookup, FilePathRequiresSubdirectories);
-            CancelAll(_wildcardTokenLookup, WildcardRequiresSubdirectories);
+            CancelAll(_filePathTokenLookup);
+            CancelAll(_wildcardTokenLookup);
 
             TryDisableFileSystemWatcher();
 
-            void CancelAll(ConcurrentDictionary<string, ChangeTokenInfo> tokens, Func<string, bool> requiresSubdirectories)
+            void CancelAll(ConcurrentDictionary<string, ChangeTokenInfo> tokens)
             {
                 foreach (KeyValuePair<string, ChangeTokenInfo> entry in tokens)
                 {
                     if (tokens.TryRemove(entry.Key, out ChangeTokenInfo matchInfo))
                     {
-                        if (requiresSubdirectories(entry.Key))
+                        if (RequiresSubdirectories(entry.Key))
                         {
-                            Interlocked.Decrement(ref _subdirectoryRequiringTokenCount);
+                            Interlocked.Decrement(ref _includeSubdirectoryCount);
                         }
 
                         CancelToken(matchInfo);
@@ -450,9 +447,9 @@ namespace Microsoft.Extensions.FileProviders.Physical
             bool matched = false;
             if (_filePathTokenLookup.TryRemove(path, out ChangeTokenInfo matchInfo))
             {
-                if (FilePathRequiresSubdirectories(path))
+                if (RequiresSubdirectories(path))
                 {
-                    Interlocked.Decrement(ref _subdirectoryRequiringTokenCount);
+                    Interlocked.Decrement(ref _includeSubdirectoryCount);
                 }
 
                 CancelToken(matchInfo);
@@ -465,9 +462,9 @@ namespace Microsoft.Extensions.FileProviders.Physical
                 if (matchResult.HasMatches &&
                     _wildcardTokenLookup.TryRemove(wildCardEntry.Key, out matchInfo))
                 {
-                    if (WildcardRequiresSubdirectories(wildCardEntry.Key))
+                    if (RequiresSubdirectories(wildCardEntry.Key))
                     {
-                        Interlocked.Decrement(ref _subdirectoryRequiringTokenCount);
+                        Interlocked.Decrement(ref _includeSubdirectoryCount);
                     }
 
                     CancelToken(matchInfo);
@@ -534,8 +531,7 @@ namespace Microsoft.Extensions.FileProviders.Physical
                         _fileWatcher.EnableRaisingEvents = false;
                     }
                     else if (_fileWatcher.IncludeSubdirectories &&
-                        !_fileWatcherIsAboveRoot &&
-                        Volatile.Read(ref _subdirectoryRequiringTokenCount) == 0)
+                        Volatile.Read(ref _includeSubdirectoryCount) == 0)
                     {
                         // Perf: Some tokens were removed and none of the remaining ones require
                         // subdirectory watching, so we can stop recursing.
@@ -583,8 +579,7 @@ namespace Microsoft.Extensions.FileProviders.Physical
                     // pattern actually references a subdirectory. This avoids creating an inotify
                     // watch descriptor on every descendant directory on Linux when only root-level files
                     // (e.g. appsettings.json) are being monitored.
-                    bool needsSubdirectories = _fileWatcherIsAboveRoot ||
-                        Volatile.Read(ref _subdirectoryRequiringTokenCount) > 0;
+                    bool needsSubdirectories = Volatile.Read(ref _includeSubdirectoryCount) > 0;
                     if (_fileWatcher.IncludeSubdirectories != needsSubdirectories)
                     {
                         _fileWatcher.IncludeSubdirectories = needsSubdirectories;
@@ -716,16 +711,9 @@ namespace Microsoft.Extensions.FileProviders.Physical
             }
         }
 
-        // Patterns are normalized to use forward slashes. A file path token references a single
-        // file, so it requires subdirectory watching only when the path is in a subdirectory
-        // (i.e. contains '/').
-        private static bool FilePathRequiresSubdirectories(string normalizedFilePath) =>
-            normalizedFilePath.Contains('/');
-
-        // A wildcard pattern requires subdirectory watching when it explicitly references a
-        // subdirectory (contains '/') or uses the recursive globbing wildcard '**'. A simple
-        // wildcard like '*' or '*.json' only matches entries directly in the root directory.
-        private static bool WildcardRequiresSubdirectories(string normalizedPattern) =>
+        // A pattern requires subdirectory watching when it references a subdirectory
+        // (contains '/') or uses the recursive globbing wildcard '**'.
+        private static bool RequiresSubdirectories(string normalizedPattern) =>
             normalizedPattern.Contains('/') || normalizedPattern.Contains("**");
 
         private static string NormalizePath(string filter) => filter.Replace('\\', '/');
